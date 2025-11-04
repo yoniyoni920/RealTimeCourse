@@ -1,6 +1,6 @@
 #include <iostream>
 #include <math.h>
-int test_prime(int n,unsigned long long int* k);
+int test_prime(unsigned long long int n,unsigned long long int* k);
 // TIP To <b>Run</b> code, press <shortcut actionId="Run"/> or click the <icon src="AllIcons.Actions.Execute"/> icon in the gutter.
 int main(void)
 {
@@ -28,7 +28,7 @@ int main(void)
     return 0;
 } /* main */
 //second deterministic version does all tests but returns first time of mismatch
-int test_prime(int n,unsigned long long int* k) {
+int test_prime(unsigned long long int n,unsigned long long int* k) {
     int is_prime = true;
     if (n == 2 || n == 3){*k = 1;}
 

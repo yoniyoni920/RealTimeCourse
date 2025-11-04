@@ -1,6 +1,6 @@
 #include <iostream>
 #include <math.h>
-int test_prime(int n,unsigned long long int* k,unsigned long* count);
+int test_prime(unsigned long long int n,unsigned long long int* k,unsigned long* count);
 // TIP To <b>Run</b> code, press <shortcut actionId="Run"/> or click the <icon src="AllIcons.Actions.Execute"/> icon in the gutter.
 int main(void)
 {
@@ -32,7 +32,7 @@ int main(void)
 
 //forth version deterministic counts the amount if checks and
 //prints the amount to show the algo is deterministic
-int test_prime(int n,unsigned long long int* k,unsigned long* count) {
+int test_prime(unsigned long long int n,unsigned long long int* k,unsigned long* count) {
     *count = 0 ;
     int is_prime = true;
     if (n == 2 || n == 3){*k = 1;}
