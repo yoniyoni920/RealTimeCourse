@@ -15,15 +15,13 @@ typedef struct position
 
 } POSITION;
 
-
 void interrupt (*old_int9)(void);
 
 char entered_ascii_codes[ARRSIZE];
 int tail = -1;
-char display[2001];
 
 char ch_arr[ARRSIZE];
-char display_draft[25][80];
+int display_draft[25][80][2];
 unsigned char far *b800h;
 int gun_position;           
 int no_of_arrows;
@@ -44,8 +42,10 @@ int gno_of_pids;
 POSITION target_pos[ARRSIZE];
 POSITION arrow_pos[ARRSIZE];
 
+POSITION ship_pos;
+
 int flag = 0;
-int target_freq = 3;
+int target_freq = 14;
 
 
 /*CHANGE */
@@ -104,40 +104,24 @@ Skip1:
 
 } // new_int9
 
-
-
 void displayer(void)
 {
     int i;
     int row, col;
     char c;
 
-//        while (1)
-//         {
-//               receive();
     for(i=0; i < 2000; i++) {
-        b800h[2*i+1] = 0x78; // black over white
+        b800h[2*i+1] = 0x08; // black over white
     }
 
     for(row=0; row < 25; row++) {
         for(col=0; col < 80; col++) {
             i = 2*(row*80 + col);
 
-            b800h[i] = c =display_draft[row][col];
-            if (c == '*') {
-                b800h[i+1] = 0x1c;
-            } else if ((c == '|') || (c == '/')||(c == '\\')|| (c == '^')) {
-                b800h[i+1] = 0x0a;
-            }
-
-            // intense white over black
-
+            b800h[i] = display_draft[row][col][0];
+            b800h[i+1] = display_draft[row][col][1];
         } // for
     }
-
-    //sleept(18);
-    //printf(display);
-//         } //while
 } // displayer
 
 
@@ -175,6 +159,8 @@ void updateter_targets()
         target_pos[0].x = 3;
         target_pos[0].y = 0; 
 
+        ship_pos.x = 2;
+        ship_pos.y = 0;
 
         for(i=1; i < TARGET_NUMBER; i++)
         {
@@ -189,6 +175,9 @@ void updateter_targets()
 //  {
 //   receive();
     if (flag == 0) {
+        ship_pos.x++;
+        ship_pos.y++;
+
         for(i=0; i < TARGET_NUMBER; i++) {
             if (target_pos[i].x != -1) {
                 if (target_pos[i].y < 22) {
@@ -205,7 +194,35 @@ void updateter_targets()
 
 } //updateter_targets()
 
-// END OF CHANGE
+// Helper function to render something at some point in the screen
+// Instead of writing two lines
+void render_col(int row, int col, char c, int attr) {
+    display_draft[col][row][0] = c;
+    display_draft[col][row][1] = attr;
+}
+void render(int row, int col, char c) {
+    display_draft[col][row][0] = c;
+}
+
+void update_ship() {
+    int x = ship_pos.x, y = ship_pos.y;
+    render(x, y, '_');
+
+    render(x-1, y+1, '(');
+    render(x, y+1, '_');
+    render(x+1, y+1, ')');
+    
+    render(x-1, y+2, '/');
+    render(x-2, y+2, '/');
+    render(x, y+2, '_');
+    render(x+1, y+2, '\\');
+    render(x+2, y+2, '\\');
+
+    // Will be the exhaust fire
+    // render_col(x-1, y+3, '\\', 0x0c);
+    // render_col(x+1, y+3, '/', 0x0c);
+    // render_col(x, y+4, 'v', 0x0c);
+}
 
 void updater()
 {
@@ -217,6 +234,9 @@ void updater()
         no_of_arrows = 0;
         no_of_targets = 4;
         gun_position = 39;
+
+        ship_pos.x = 2;
+        ship_pos.y = 0;
 
         for(i=0; i < ARROW_NUMBER; i++)
             arrow_pos[i].x = arrow_pos[i].y = -1;
@@ -231,7 +251,8 @@ void updater()
     ch = 0;
     for(i=0; i < 25; i++) {
         for(j=0; j < 80; j++) {
-            display_draft[i][j] = ' ';  // blank
+            display_draft[i][j][0] = ' ';  // blank
+            display_draft[i][j][1] = 0x0f;  // blank
         }
     }
 
@@ -246,25 +267,13 @@ void updater()
         if ((ch == 'a') || (ch == 'A')) {
             if (gun_position >= 2) {
                 gun_position--;
-// CHANGE
-                display_draft[22][gun_position] = '^';
-                display_draft[23][gun_position-1] = '/';
-                display_draft[23][gun_position] = '|';
-                display_draft[23][gun_position+1] = '\\';
-                display_draft[24][gun_position] = '|';
-// END OF CHANGE
-            } else;
+                update_ship();
+            }
         } else if ((ch == 'd') || (ch == 'D')) {
             if (gun_position <= 78) {
                 gun_position++;
-// CHANGE
-                display_draft[22][gun_position] = '^';
-                display_draft[23][gun_position-1] = '/';
-                display_draft[23][gun_position] = '|';
-                display_draft[23][gun_position+1] = '\\';
-                display_draft[24][gun_position] = '|';
-// END OF CHANGE
-            } else;
+                update_ship();
+            }
         } else if ((ch == 'w') || (ch == 'W')) {
             if (no_of_arrows < ARROW_NUMBER) {
                 arrow_pos[no_of_arrows].x = gun_position;
@@ -275,54 +284,41 @@ void updater()
         }
     } // while(front != -1)
 
+    update_ship();
 
-    display_draft[22][gun_position] = '^';
-    display_draft[23][gun_position-1] = '/';
-    display_draft[23][gun_position] = '|';
-    display_draft[23][gun_position+1] = '\\';
-    display_draft[24][gun_position] = '|';
-
-    for(i=0; i < ARROW_NUMBER; i++)
-        if (arrow_pos[i].x != -1)
-        {
+    for(i=0; i < ARROW_NUMBER; i++) {
+        if (arrow_pos[i].x != -1) {
             int j;
-            if (arrow_pos[i].y >= 0)
-            {
+            if (arrow_pos[i].y >= 0) {
                 arrow_pos[i].y--;
-                display_draft[arrow_pos[i].y][arrow_pos[i].x] = '^';
-                display_draft[arrow_pos[i].y+1][arrow_pos[i].x] = '|';
+                display_draft[arrow_pos[i].y][arrow_pos[i].x][0] = '^';
+                display_draft[arrow_pos[i].y+1][arrow_pos[i].x][0] = '|';
             } // if
-            for(j=0; j < TARGET_NUMBER; j++)
-/* CHANGE */
-                if ((arrow_pos[i].x == target_pos[j].x) &&
-                (arrow_pos[i].y <= target_pos[j].y)) {
+
+            for(j=0; j < TARGET_NUMBER; j++) { /* CHANGE */
+                if ((arrow_pos[i].x == target_pos[j].x) && (arrow_pos[i].y <= target_pos[j].y)) {
                     target_flags[j] = 0;
                 }
+            }
+
         } // if
-    for(i=0; i < TARGET_NUMBER; i++)
-/*CHANGE */       if (target_flags[i] == 1) {
+    }
+
+    for(i=0; i < TARGET_NUMBER; i++) {
+        if (target_flags[i] == 1) { /*CHANGE */
             if (target_pos[i].x != -1)
             {
                 // CHANGE TO COMMENT if (target_pos[i].y < 22)
                 // CHANGE TO COMMENT      target_pos[i].y++;    
-                display_draft[target_pos[i].y][target_pos[i].x] = '*';
+                display_draft[target_pos[i].y][target_pos[i].x][0] = '*';
             } // if
         }
-
-    for(i=0; i < 25; i++)
-        for(j=0; j < 80; j++)
-            display[i*80+j] = display_draft[i][j];
-    display[2000] = '\0';
-
-
- // } // while(1)
-
+    }
 } // updater 
 
 
 
-main()
-{
+void main() {
     int uppid, dispid, recvpid, targid;
     int i;
  
@@ -352,7 +348,7 @@ main()
         receiver();
         updater();
    
-    //   delay(10);
+        delay(1);
         // sleep(1);
 
     } // while
