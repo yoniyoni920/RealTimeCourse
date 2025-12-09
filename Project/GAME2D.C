@@ -151,10 +151,9 @@ void updateter_targets()
     } // if (initial_run == 1)
 
     if (flag == 0) {
-        // if (ship_pos.x < 80) {
-            ship_pos.x++;
-        // }
-
+        ship_pos.x += ship_vel.x;
+        ship_pos.x %= 80; // Make the ship go back to left
+        
         if (ship_pos.y < 22) {
             ship_pos.y += ship_vel.y;
         }
@@ -204,7 +203,7 @@ void updater()
     ch = 0;
     for(i=0; i < 25; i++) {
         for(j=0; j < 80; j++) {
-            display_draft[i][j] = ' ';  // blank
+                display_draft[i][j] = ' ';  // blank
             color_draft[i][j] = 0x0f;  // blank
         }
     }
