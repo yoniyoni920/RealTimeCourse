@@ -2,6 +2,8 @@
 
 #include <stdio.h>
 #include <dos.h>
+#include <stdio.h>
+#include <time.h>
 
 #define ARROW_NUMBER 80
 #define TARGET_NUMBER 4
@@ -21,6 +23,7 @@ char entered_ascii_codes[ARRSIZE];
 int tail = -1;
 
 char ch_arr[ARRSIZE];
+int terrain[25][80];
 int display_draft[25][80];
 int color_draft[25][80]; // Same as display draft but for coloring
 
@@ -41,10 +44,10 @@ int gno_of_pids;
 
 POSITION ship_pos;
 POSITION ship_vel;
-int fuel = 100;
+int fuel = 1000;
 
 int flag = 0;
-int target_freq = 10;
+int target_freq = 4;
 
 
 /*CHANGE */
@@ -139,7 +142,7 @@ void receiver()
 } // receiver
 
 // CHANGE
-void updateter_targets()
+void update_ship_pos()
 {
     int i,j;
     static int initial_run = 1;
@@ -148,6 +151,7 @@ void updateter_targets()
         initial_run = 0;
         ship_pos.x = 2;
         ship_pos.y = 0;
+        ship_vel.x = 1;
     } // if (initial_run == 1)
 
     if (flag == 0) {
@@ -161,6 +165,24 @@ void updateter_targets()
         if (ship_vel.y < 1) {
             ship_vel.y++;
         }
+
+        if (ship_pos.y+2 > 20) {
+            for(i=20; i < 25; i++) {
+                for(j=0; j < 80; j++) {
+                    if (terrain[i][j] != NULL && j >= ship_pos.x && j <= ship_pos.x+5 && i <= ship_pos.y+2 && i >= ship_pos.y) {
+                        ship_vel.x = 0;
+                        ship_vel.y = 0;
+
+                         // Game over, ship touched some non flat surface
+                         // Not sure for now if this is the best way to check it. It currently checks each point if it's inside the "hitbox" of the ship
+                        if (terrain[i][j] != '_') {
+
+                        }
+                    }
+                }
+            }
+
+        }
     }
     flag++;
     flag = flag % target_freq;
@@ -168,16 +190,62 @@ void updateter_targets()
 
   //} // while
 
-} //updateter_targets()
+} //update_ship_pos()
 
-// Helper function to render something at some point in the screen
-// Instead of writing two lines
+// Helper function to render something at some point in the screen with color
 void render_col(int row, int col, char c, int attr) {
     display_draft[col][row] = c;
     color_draft[col][row] = attr;
 }
-void render(int row, int col, char c) {
-    display_draft[col][row] = c;
+
+void make_terrain() {
+    int i;
+    int ascending = 1, curr_y = 24;
+    int flat_1_index, flat_2_index;
+
+    // Generate two points to put flat surfaces. Could try generalizing it to put more than 2 flat surfaces
+    // We put them in two separate halves to separate them
+    srand(time(NULL));
+    flat_1_index = rand() % 30;
+    srand(time(NULL));
+    flat_2_index = rand() % 30 + 40;
+    
+    curr_y = 24;
+    for (i = 0; i < 80; i++) {
+        if ((i >= flat_1_index && i <= flat_1_index+8) || (i >= flat_2_index && i <= flat_2_index+8)) {
+            terrain[ascending ? curr_y : curr_y-1][i] = '_'; // Align the underscore well with desecending mountains
+        } else {
+            int changed = 0, was_ascending;
+            
+            if (ascending) {
+                terrain[curr_y--][i] = '/';
+                if (curr_y <= 20) {
+                    changed = 1;
+                    ascending = 0;
+                }
+            } else {
+                terrain[curr_y++][i] = '\\';
+                if (curr_y >= 24) {
+                    ascending = 1;
+                    changed = 1;
+                }
+            }
+    
+            if (!changed) {
+                was_ascending = ascending;
+                ascending = rand() % 2;
+                changed = was_ascending != ascending;
+            }
+    
+            if (changed) {
+                if (ascending) {
+                    curr_y--;
+                } else {
+                    curr_y++;
+                }
+            }
+        }
+    }
 }
 
 void updater()
@@ -186,11 +254,13 @@ void updater()
     int show_exhaust = 0;
     static int initial_run = 1;
     int x = ship_pos.x, y = ship_pos.y;
+    
     char ship[][6] = {
         "  _",
         " (_)",
         "//_\\\\"
     };
+
 
     if (initial_run == 1) {
         initial_run = 0;
@@ -198,12 +268,18 @@ void updater()
         ship_pos.y = 0;
     }
 
-    updateter_targets();
+    update_ship_pos();
 
     ch = 0;
     for(i=0; i < 25; i++) {
         for(j=0; j < 80; j++) {
+            char c = terrain[i][j];
+            if (c != NULL) {
+                display_draft[i][j] = c;
+            } else {
                 display_draft[i][j] = ' ';  // blank
+            }
+
             color_draft[i][j] = 0x0f;  // blank
         }
     }
@@ -267,6 +343,8 @@ void main() {
 
     old_int9 = getvect(9);
     setvect(9, new_int9);
+
+    make_terrain();
 
     while(1) {
         displayer();
