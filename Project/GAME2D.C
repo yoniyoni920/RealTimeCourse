@@ -105,9 +105,9 @@ void displayer(void)
     int row, col;
     char c;
 
-    for(i=0; i < 2000; i++) {
-        b800h[2*i+1] = 0x08; // black over white
-    }
+    // for(i=0; i < 2000; i++) {
+    //     b800h[2*i+1] = 0x08; // black over white
+    // }
 
     for(row=0; row < 25; row++) {
         for(col=0; col < 80; col++) {
