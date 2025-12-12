@@ -20,22 +20,23 @@ typedef struct position
 
 void interrupt (*old_int9)(void);
 
-char entered_ascii_codes[ARRSIZE];
+//char entered_ascii_codes[ARRSIZE];
+int game_over = 0;
 int tail = -1;
-
+char next_cm = 0;
 char ch_arr[ARRSIZE];
 int terrain[25][80];
 int display_draft[25][80];
 int color_draft[25][80]; // Same as display draft but for coloring
-
+int game_running = 1;
 unsigned char far *b800h;
 int gun_position;           
 int no_of_arrows;
 int target_disp = 80/TARGET_NUMBER;
 char ch;
 int no_of_targets;
-
-
+int score = 0;
+int lives = 3;
 int front = -1;
 int rear = -1;
 
@@ -45,7 +46,7 @@ int gno_of_pids;
 
 POSITION ship_pos;
 POSITION ship_vel;
-int fuel = 1000;
+int fuel = 10;
 
 int flag = 0;
 int target_freq = 4;
@@ -96,13 +97,13 @@ void interrupt new_int9(void)
         ascii = 'd';
     }
     if (scan == 1) { // Esc
-        my_halt(); // terminate program
+        game_running = 0; // terminate program
     }
-
-    if ((ascii != 0) && (tail < ARRSIZE))
-    {
-        entered_ascii_codes[++tail] = ascii;
-    } // if
+    next_cm = ascii;
+    // if ((ascii != 0) && (tail < ARRSIZE))
+    // {
+    //     entered_ascii_codes[++tail] = ascii;
+    // } // if
 
 Skip1:
 
@@ -113,39 +114,67 @@ void displayer(void)
     int i;
     int row, col;
     char c;
-
+    
+    char hud_text[81];
+    char msg_score[40];
+    char msg_gameover[] = "GAME OVER";
     // for(i=0; i < 2000; i++) {
     //     b800h[2*i+1] = 0x08; // black over white
     // }
+    if(!game_over){
+        for(row=0; row < 25; row++) {
+            for(col=0; col < 80; col++) {
+                i = 2*(row*80 + col);
 
-    for(row=0; row < 25; row++) {
-        for(col=0; col < 80; col++) {
-            i = 2*(row*80 + col);
-
-            b800h[i] = display_draft[row][col];
-            b800h[i+1] = color_draft[row][col];
-        } // for
-    }
-} // displayer
-
-
-void receiver()
-{
-    char temp;
-    while(tail > -1)
-    {
-        temp = entered_ascii_codes[tail];
-        rear++;
-        tail--;
-        if (rear < ARRSIZE) {
-            ch_arr[rear] = temp;
+                b800h[i] = display_draft[row][col];
+                b800h[i+1] = color_draft[row][col];
+            } // for
         }
-        if (front == -1) {
-            front = 0;
+        sprintf(hud_text, "Fuel:%4d   Altitude:%2d   X.speed:%2d   Y.Speed:%2d Score:%4d  Lives:%2d", 
+                fuel, (20 - ship_pos.y), ship_vel.x, ship_vel.y,score,lives);
+                for(i = 0; i < strlen(hud_text); i++) {
+                    b800h[2*i] = hud_text[i];
+                    b800h[2*i+1] = 0x1F;
+                }
+        }else{
+            for(i=0; i < 2000; i++) {
+            b800h[2*i] = ' '; 
+            b800h[2*i+1] = 0x4F;
         }
-    } // while
+        for(i=0; i < strlen(msg_gameover); i++) {
+            int offset = 2 * (10 * 80 + 35 + i); 
+            b800h[offset] = msg_gameover[i];
+            b800h[offset+1] = 0x4E; // Yellow on Red
+        }
+        sprintf(msg_score, "FINAL SCORE: %d", score);
+        for(i=0; i < strlen(msg_score); i++) {
+            int offset = 2 * (12 * 80 + 35 + i); 
+            b800h[offset] = msg_score[i];
+            b800h[offset+1] = 0x4F;
+        }
 
-} // receiver
+        }
+
+        } // displayer
+
+
+// void receiver()
+// {
+//     // char temp;
+//     // while(tail > -1)
+//     // {
+//     //     temp = entered_ascii_codes[tail];
+//     //     rear++;
+//     //     tail--;
+//     //     // if (rear < ARRSIZE) {
+//     //     //     ch_arr[rear] = temp;
+//     //     // }
+//     //     // if (front == -1) {
+//     //     //     front = 0;
+//     //     // }
+//     // } // while
+
+// } // receiver
 
 // CHANGE
 void update_ship_pos()
@@ -159,7 +188,7 @@ void update_ship_pos()
         ship_pos.y = 0;
         ship_vel.x = 1;
     } // if (initial_run == 1)
-
+    if (game_over) return;
     if (flag == 0) {
         ship_pos.x += ship_vel.x;
         ship_pos.x %= 80; // Make the ship go back to left
@@ -184,16 +213,47 @@ void update_ship_pos()
                         ship_vel.y = 0;
 
                     
-                        if (terrain[i][j] != '_') {// landed saftly
+                        if (terrain[i][j] == '_') {// landed saftly
                             //print you landed saftly got 100 points and 10 fuel
                             //if you get too 300 points you win message end game
-
+                            score+=100;
+                            fuel += 10;
+                            if(score >= 300){
+                                target_freq = 2; // increase game speed
+                            }
+                            if (score >= 600) {
+                                game_over = 1;
+                            } else {
+                                
+                                memset(terrain, 0, sizeof(terrain));
+                                make_terrain(terrain,score);
+                                ship_pos.x = 2;
+                                ship_pos.y = 0;
+                                ship_vel.x = 1;
+                                ship_vel.y = 0;
+                        }
                         }else{
                             // ship did not land on flat surface - hit obstacle
                             //lose 5 fuel minus 50 points
-
-                            
+                                lives --;
+                                score-=50;
+                                if(score <= 300){
+                                target_freq = 4; // decrease  game speed
+                            }
+                            if(fuel <= 0 || lives <= 0){
+                                game_over = 1; 
+                            } else {
+                                // Reset for retry
+                                memset(terrain, 0, sizeof(terrain));
+                                make_terrain(terrain,score);
+                                ship_pos.x = 2;
+                                ship_pos.y = 0;
+                                ship_vel.x = 1;
+                                ship_vel.y = 0;
+                            }
+                           
                         }
+                        return;
                     }
                 }
             }
@@ -209,13 +269,18 @@ void update_ship_pos()
 } //update_ship_pos()
 
 // Helper function to render something at some point in the screen with color
-void render_col(int row, int col, char c, int attr) {
-    display_draft[col][row] = c;
-    color_draft[col][row] = attr;
+void render_col(int col, int row, char c, int attr) {
+    if (row >= 0 && row < 25 && col >= 0 && col < 80) {
+        display_draft[row][col] = c;  
+        color_draft[row][col] = attr;
+    }
 }
 
 void updater()
 {
+    int input_w = 0;
+    int input_d = 0;
+    int input_a = 0;
     int i,j;
     int show_exhaust = 0;
     static int initial_run = 1;
@@ -251,42 +316,56 @@ char ship[][6] = {
         }
     }
 
-    while(front != -1)  {
-        ch = ch_arr[front];
-        if(front != rear) {
-            front++;
-        } else {
-            front = rear = -1;
-        }
+   // while(front != -1)  {//Keep looping as long as the queue is not empty
+        // ch = ch_arr[front];//take the first char
+        // if(front != 0) {
+        //     front++;
+        // } else {
+        //     front = rear = -1;
+        // }
 
-        if ((ch == 'w' || ch == 'W') && fuel > 0) {
-            if (ship_vel.y > -1) {
+        if (next_cm == 'w' || next_cm == 'W') input_w = 1;
+        if (next_cm == 'd' || next_cm == 'D') input_d = 1;
+        if (next_cm == 'a' || next_cm == 'A') input_a = 1;
+    //}// while(front != -1)
+        if ((input_w) && fuel > 0 ) {
+            if (ship_vel.y > -3 ) {
+                // for some reason the speed here is backwards meaning minus speed means going up- 
+                //in the diplayer i made it so positive velocity meanst up
                 ship_vel.y--;
+                show_exhaust = 1;
+                fuel--;
+                
             }
-            show_exhaust = 1;
-            fuel--;
+           
+            
         }
-        if ((ch == 'd' || ch == 'D') && fuel > 0) {
+        if ((input_d) && fuel > 0 && ship_vel.x <=2) {
             ship_vel.x++;
             show_exhaust = 3;
             fuel--;
+            
         }
-        if ((ch == 'a' || ch == 'A') && fuel > 0) {
+        if ((input_a) && fuel > 0 && ship_vel.x >=-2) {
             ship_vel.x--;
             show_exhaust = 2;
             fuel--;
+            
         }
-    } // while(front != -1)
+        input_w = 0;
+        input_d = 0;
+        input_a = 0;
+        next_cm = 0;
 
-    for (i = 0; i < 4; i++) {
-        char* s = ship[i];
-        for (j = 0; j < strlen(s); j++) {
-            char c = s[j];
-            if (c != ' ') {
-                display_draft[y + i][x - 2 + j] = c;
+        for (i = 0; i < 4; i++) {
+            char* s = ship[i];
+            for (j = 0; j < strlen(s); j++) {
+                char c = s[j];
+                if (c != ' ') {
+                    display_draft[y + i][x - 2 + j] = c;
+                }
             }
         }
-    }
 
     // Will be the exhaust fire
    if (show_exhaust == 1) {
@@ -336,16 +415,21 @@ void main() {
     old_int9 = getvect(9);
     setvect(9, new_int9);
 
-    make_terrain(terrain);
+    make_terrain(terrain,score);
 
-    while(1) {
+    while(game_running) {
         displayer();
-        receiver();
+        // receiver();
         updater();
    
         delay(300);
         // sleep(1);
     } // while
-
-
+    setvect(9, old_int9);
+    
+    asm {
+        MOV AX, 3
+        INT 10h
+    }
+    exit(0);
 } // main
