@@ -234,7 +234,7 @@ void update_ship_pos()
                         }
                         }else{
                             // ship did not land on flat surface - hit obstacle
-                            //lose 5 fuel minus 50 points
+                            // minus 50 points
                                 lives --;
                                 score-=50;
                                 if(score <= 300){
@@ -328,25 +328,27 @@ char ship[][6] = {
         if (next_cm == 'd' || next_cm == 'D') input_d = 1;
         if (next_cm == 'a' || next_cm == 'A') input_a = 1;
     //}// while(front != -1)
-        if ((input_w) && fuel > 0 ) {
+        if ((input_w) && fuel > 0 &&  flag == 0) {
             if (ship_vel.y > -3 ) {
                 // for some reason the speed here is backwards meaning minus speed means going up- 
                 //in the diplayer i made it so positive velocity meanst up
                 ship_vel.y--;
+                ship_vel.y--;
                 show_exhaust = 1;
                 fuel--;
+                
                 
             }
            
             
         }
-        if ((input_d) && fuel > 0 && ship_vel.x <=2) {
+        if ((input_d) && fuel > 0 && ship_vel.x <=2  &&  flag == 0) {
             ship_vel.x++;
             show_exhaust = 3;
             fuel--;
             
         }
-        if ((input_a) && fuel > 0 && ship_vel.x >=-2) {
+        if ((input_a) && fuel > 0 && ship_vel.x >=-2  &&  flag == 0) {
             ship_vel.x--;
             show_exhaust = 2;
             fuel--;
