@@ -5,20 +5,18 @@
 #include <time.h>   
 
 
-void make_terrain(int terrain[25][80],int score) {
+void make_terrain(int terrain[25][80], int diff) {
     int i;
     int ascending = 1, curr_y = 24;
     int flat_1_index, flat_2_index;
-    int sizeof_ = 8; 
+    int sizeof_ = 10 / diff; 
     // Generate two points to put flat surfaces. Could try generalizing it to put more than 2 flat surfaces
     // We put them in two separate halves to separate them
     srand(time(NULL));
     flat_1_index = rand() % 30;
     srand(time(NULL));
     flat_2_index = rand() % 30 + 40;
-    if(score>=300){// if score is greater than 300 increase difficulty
-        sizeof_ = 4;
-    }
+
     curr_y = 24;
     for (i = 0; i < 80; i++) {
         if ((i >= flat_1_index && i <= flat_1_index+sizeof_) || (i >= flat_2_index && i <= flat_2_index+sizeof_)) {

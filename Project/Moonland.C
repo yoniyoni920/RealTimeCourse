@@ -31,14 +31,18 @@ int terrain[25][80];
 int display_draft[25][80];
 unsigned char far *b800h;
 int color_draft[25][80]; // Same as display draft but for coloring
-int score = 0;
-int lives = 3;
 POSITION ship_pos;
 POSITION ship_vel;
+
+int passes = 0;
+int score = 0;
+int lives = 3;
 int fuel = 10;
+int diff = 1;
+int active_thrust;
 
 int flag = 0;
-int target_freq = 4;
+int velocity_flag = 0;
 
 const char ship[][6] = {
     "  _",
@@ -61,6 +65,25 @@ void quit_game()
     exit(0);
 } // quit_game()
 
+void start_game() {
+    memset(terrain, 0, sizeof(terrain));
+    make_terrain(terrain, diff);
+    ship_pos.x = 1;
+    ship_pos.y = 0;
+    ship_vel.x = 1;
+    ship_vel.y = 1;
+}
+
+void reset_game() {
+    diff = 1;
+    score = 0;
+    lives = 3;
+    fuel = 10;
+    game_over = 0;
+    passes = 0;
+    start_game();
+}
+
 void interrupt new_int9(void)
 {
     unsigned char scan;
@@ -72,9 +95,14 @@ void interrupt new_int9(void)
         scan &= 0x7F;   // remove release bit
 
         if (scan == 75) { entered_ascii_codes[++tail] = 'a'; }
-        if (scan == 72) { entered_ascii_codes[++tail] = 'w'; }
-        if (scan == 77) { entered_ascii_codes[++tail] = 'd'; }
-        if (scan == 1) quit_game();
+        else if (scan == 72) { entered_ascii_codes[++tail] = 'w'; }
+        else if (scan == 77) { entered_ascii_codes[++tail] = 'd'; }
+        else if (scan == 0x1C) { 
+            if (game_over) {
+                reset_game();
+            }   
+        }
+        else if (scan == 1) quit_game();
     }
 
     outport(0x20, 0x20); // End Of Interrupt (EOI)
@@ -108,7 +136,7 @@ void displayer(void)
         for(row=0; row < 25; row++) {
             for(col=0; col < 80; col++) {
                 color_draft[row][col] = 0x4E; // Yellow on Red
-        }
+            }
         }
 
         for(i=0; i < strlen(msg_gameover); i++) {
@@ -157,25 +185,25 @@ void receiver()
 void update_ship_pos()
 {
     int i,j;
-    static int initial_run = 1;
 
-    if (initial_run == 1) {
-        initial_run = 0;
-        ship_pos.x = 2;
-        ship_pos.y = 0;
-        ship_vel.x = 1;
-    } // if (initial_run == 1)
-    if (game_over) return;
     if (flag == 0) {
         ship_pos.x += ship_vel.x;
-        ship_pos.x %= 80; // Make the ship go back to left
         
-        if (ship_pos.y < 21) {
-            ship_pos.y += ship_vel.y;
+        // Fix X position
+        if (ship_pos.x < 0) {
+            ship_pos.x += 80;
         }
+        ship_pos.x %= 80;
 
-        if (ship_vel.y < 1) {
+        if (active_thrust > 0) {
+            ship_vel.y--;
+            active_thrust--;
+        } else if (ship_vel.y < 1) {
             ship_vel.y++;
+        }
+        
+        if ((ship_vel.y > 0 && ship_pos.y < 21) || (ship_vel.y < 0 && ship_pos.y > 2)) { // Prevent going above/below the screen
+            ship_pos.y += ship_vel.y;
         }
 
         if (ship_pos.y+3 > 20) {
@@ -193,39 +221,28 @@ void update_ship_pos()
                         if (terrain[i][j] == '_') {// landed saftly
                             //print you landed saftly got 100 points and 10 fuel
                             //if you get too 300 points you win message end game
+                            passes++;
                             score+=100;
-                            fuel += 10;
-                            if(score >= 300){
-                                target_freq = 2; // increase game speed
+                            fuel += 5;
+                            if (passes == 3) {
+                                diff++; // Increase game's difficulty
                             }
-                            if (score >= 600) {
-                                game_over = 1;
-                            } else {
-                                memset(terrain, 0, sizeof(terrain));
-                                make_terrain(terrain,score);
-                                ship_pos.x = 2;
-                                ship_pos.y = 0;
-                                ship_vel.x = 1;
-                                ship_vel.y = 0;
-                            }
+                            start_game();
                         }else{
                             // ship did not land on flat surface - hit obstacle
                             // minus 50 points
-                                lives --;
-                                score-=50;
-                                if(score <= 300){
-                                target_freq = 4; // decrease  game speed
-                            }
-                            if(fuel <= 0 || lives <= 0){
+                            lives--;
+                            score-=50;
+
+                            if (fuel <= 0 || lives <= 0) {
                                 game_over = 1; 
                             } else {
-                                // Reset for retry
-                                memset(terrain, 0, sizeof(terrain));
-                                make_terrain(terrain,score);
-                                ship_pos.x = 2;
-                                ship_pos.y = 0;
-                                ship_vel.x = 1;
-                                ship_vel.y = 0;
+                                passes = 0;
+                                if (diff > 1) {
+                                    diff--;
+                                }
+                                // Retry
+                                start_game();
                             }
                            
                         }
@@ -236,8 +253,11 @@ void update_ship_pos()
 
         }
     }
+
     flag++;
-    flag = flag % target_freq;
+    flag %= (4 - diff);
+    velocity_flag++;
+    velocity_flag %= 4;
 
 
   //} // while
@@ -257,13 +277,10 @@ void updater()
     int input_w = 0, input_d = 0, input_a = 0;
     int i,j;
     int show_exhaust = 0;
-    static int initial_run = 1;
     int x = ship_pos.x, y = ship_pos.y;
 
-    if (initial_run == 1) {
-        initial_run = 0;
-        ship_pos.x = 2;
-        ship_pos.y = 0;
+    if (game_over) {
+        return;
     }
 
     update_ship_pos();
@@ -296,17 +313,13 @@ void updater()
 
     if ((input_w) && fuel > 0) {
         if (ship_vel.y > -3 ) {
-            // for some reason the speed here is backwards meaning minus speed means going up- 
-            //in the diplayer i made it so positive velocity meanst up
-            ship_vel.y--;
-            ship_vel.y--;
-            show_exhaust |= 8;
+            active_thrust = 3;
             fuel--;
         }
     }
     if ((input_d) && fuel > 0 && ship_vel.x <=2 ) {
         ship_vel.x++;
-        show_exhaust |= 4;
+        show_exhaust |= 1;
         fuel--;
         
     }
@@ -328,25 +341,25 @@ void updater()
     }
 
     // Will be the exhaust fire
-   if (show_exhaust & 8) {
+   if (active_thrust > 0) {
         render_col(x-1, y+4, '\\', 0x0c);
         render_col(x+1, y+4, '/', 0x0c);
         render_col(x, y+5, 'v', 0x0c);
     }
     // 2. Left exhaust
-    else if (show_exhaust & 4) {
-        render_col(x+4, y+1, '\\', 0x0c); 
-        render_col(x+4, y+2, '=', 0x0e);  
-        render_col(x+5, y+2, '>', 0x0c);  
-        render_col(x+4, y+3, '/', 0x0c); 
-    }
-    
-    // 3. Right  exhaust
-    else if (show_exhaust & 2) {
+    else if (show_exhaust & 1) {
         render_col(x-3, y+1, '/', 0x0c);  
         render_col(x-3, y+2, '=', 0x0e);  
         render_col(x-4, y+2, '<', 0x0c);  
         render_col(x-3, y+3, '\\', 0x0c); 
+    }
+    
+    // 3. Right  exhaust
+    else if (show_exhaust & 2) {
+        render_col(x+4, y+1, '\\', 0x0c); 
+        render_col(x+4, y+2, '=', 0x0e);  
+        render_col(x+5, y+2, '>', 0x0c);  
+        render_col(x+4, y+3, '/', 0x0c); 
     }
 } // updater 
 
@@ -375,7 +388,9 @@ void main() {
     old_int9 = getvect(9);
     setvect(9, new_int9);
 
-    make_terrain(terrain,score);
+    make_terrain(terrain, diff);
+
+    reset_game();
 
     while(1) {
         displayer();
