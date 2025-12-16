@@ -122,6 +122,13 @@ void displayer(void)
     //     b800h[2*i+1] = 0x08; // black over white
     // }
     if(!game_over){
+        sprintf(hud_text, "Fuel:%4d   Altitude:%2d   X.speed:%2d   Y.Speed:%2d Score:%4d  Lives:%2d", 
+                fuel, (20 - ship_pos.y), ship_vel.x, ship_vel.y,score,lives);
+        for(i = 0; i < strlen(hud_text); i++) {
+            display_draft[0][i] = hud_text[i];
+            color_draft[0][i] = 0x1F;
+        }
+
         for(row=0; row < 25; row++) {
             for(col=0; col < 80; col++) {
                 i = 2*(row*80 + col);
@@ -130,14 +137,8 @@ void displayer(void)
                 b800h[i+1] = color_draft[row][col];
             } // for
         }
-        sprintf(hud_text, "Fuel:%4d   Altitude:%2d   X.speed:%2d   Y.Speed:%2d Score:%4d  Lives:%2d", 
-                fuel, (20 - ship_pos.y), ship_vel.x, ship_vel.y,score,lives);
-                for(i = 0; i < strlen(hud_text); i++) {
-                    b800h[2*i] = hud_text[i];
-                    b800h[2*i+1] = 0x1F;
-                }
-        }else{
-            for(i=0; i < 2000; i++) {
+    } else {
+        for(i=0; i < 2000; i++) {
             b800h[2*i] = ' '; 
             b800h[2*i+1] = 0x4F;
         }
@@ -152,10 +153,9 @@ void displayer(void)
             b800h[offset] = msg_score[i];
             b800h[offset+1] = 0x4F;
         }
+    }
 
-        }
-
-        } // displayer
+} // displayer
 
 
 // void receiver()
