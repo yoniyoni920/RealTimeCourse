@@ -89,41 +89,47 @@ void displayer(void)
     char hud_text[81];
     char msg_score[40];
     char msg_gameover[] = "GAME OVER";
+    char press_enter[] = "PRESS ENTER TO CONTINUE";
     // for(i=0; i < 2000; i++) {
     //     b800h[2*i+1] = 0x08; // black over white
     // }
     if(!game_over){
+        int x_pos = 5;
         sprintf(hud_text, "Fuel:%4d   Altitude:%2d   X.speed:%2d   Y.Speed:%2d Score:%4d  Lives:%2d", 
-                fuel, (20 - ship_pos.y), ship_vel.x, ship_vel.y,score,lives);
+                fuel, (20 - ship_pos.y), ship_vel.x * diff, ship_vel.y * diff,score,lives);
         for(i = 0; i < strlen(hud_text); i++) {
-            display_draft[0][i] = hud_text[i];
-            color_draft[0][i] = 0x1F;
+            display_draft[1][x_pos+i] = hud_text[i];
+            color_draft[1][x_pos+i] = 0x1F;
         }
 
+
+    } else {
+        int x_pos = 30;
         for(row=0; row < 25; row++) {
             for(col=0; col < 80; col++) {
-                i = 2*(row*80 + col);
+                color_draft[row][col] = 0x4E; // Yellow on Red
+        }
+        }
 
-                b800h[i] = display_draft[row][col];
-                b800h[i+1] = color_draft[row][col];
-            } // for
-        }
-    } else {
-        for(i=0; i < 2000; i++) {
-            b800h[2*i] = ' '; 
-            b800h[2*i+1] = 0x4F;
-        }
         for(i=0; i < strlen(msg_gameover); i++) {
-            int offset = 2 * (10 * 80 + 35 + i); 
-            b800h[offset] = msg_gameover[i];
-            b800h[offset+1] = 0x4E; // Yellow on Red
+            display_draft[12][x_pos + i] = msg_gameover[i];
         }
-        sprintf(msg_score, "FINAL SCORE: %d", score);
+        sprintf(msg_score, "FINAL SCORE: %10d", score);
         for(i=0; i < strlen(msg_score); i++) {
-            int offset = 2 * (12 * 80 + 35 + i); 
-            b800h[offset] = msg_score[i];
-            b800h[offset+1] = 0x4F;
+            display_draft[13][x_pos + i] = msg_score[i];
         }
+        for(i=0; i < strlen(press_enter); i++) {
+            display_draft[14][x_pos + i] = press_enter[i];
+        }
+    }
+
+    for(row=0; row < 25; row++) {
+        for(col=0; col < 80; col++) {
+            i = 2*(row*80 + col);
+
+            b800h[i] = display_draft[row][col];
+            b800h[i+1] = color_draft[row][col];
+        } // for
     }
 
 } // displayer
