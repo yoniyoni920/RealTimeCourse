@@ -20,30 +20,19 @@ typedef struct position
 
 void interrupt (*old_int9)(void);
 
-//char entered_ascii_codes[ARRSIZE];
-int game_over = 0;
-int tail = -1;
-char next_cm = 0;
-char ch_arr[ARRSIZE];
-int terrain[25][80];
-int display_draft[25][80];
-int color_draft[25][80]; // Same as display draft but for coloring
-int game_running = 1;
-unsigned char far *b800h;
-int gun_position;           
-int no_of_arrows;
-int target_disp = 80/TARGET_NUMBER;
-char ch;
-int no_of_targets;
-int score = 0;
-int lives = 3;
+char entered_ascii_codes[ARRSIZE];
 int front = -1;
 int rear = -1;
 
-int point_in_cycle;
-int gcycle_length;
-int gno_of_pids;
-
+int game_over = 0;
+int tail = -1;
+char ch_arr[ARRSIZE];
+int terrain[25][80];
+int display_draft[25][80];
+unsigned char far *b800h;
+int color_draft[25][80]; // Same as display draft but for coloring
+int score = 0;
+int lives = 3;
 POSITION ship_pos;
 POSITION ship_vel;
 int fuel = 10;
@@ -51,63 +40,45 @@ int fuel = 10;
 int flag = 0;
 int target_freq = 4;
 
+const char ship[][6] = {
+    "  _",
+    " | |",
+    " (_)",
+    "//_\\\\"
+};
 
 /*CHANGE */
 int target_flags[TARGET_NUMBER];
 void interrupt (*old_int9)(void);
 
-void my_halt()
+void quit_game()
 {
+    outport(0x20, 0x20);
     setvect(9, old_int9);
     asm {
         CLI         // Clear Interrupt Flag, disabling maskable interrupts
     }
     exit(0);
-   
-} // my_halt()
-
+} // quit_game()
 
 void interrupt new_int9(void)
 {
-    char result = 0;
-    int scan = 0;
-    int ascii = 0;
+    unsigned char scan;
 
-    (*old_int9)(); // Call the original INT 9 (Hardware Keyboard) handler
+    scan = inport(0x60);   // Read raw scan code
 
+    if (scan & 0x80) {
+        // KEY RELEASE
+        scan &= 0x7F;   // remove release bit
 
-    asm {
-        MOV AH,1    // Function 1: Check if a key is waiting in the keyboard buffer
-        INT 16h     // BIOS Keyboard Interrupt
-        JZ Skip1    // Jump if Zero (ZF is set, meaning no key is available)
-        MOV AH,0    // Function 0: Read key from keyboard buffer and wait if necessary
-        INT 16h     // BIOS Keyboard Interrupt
-        MOV BYTE PTR scan,AH // AH contains the scan code
-        MOV BYTE PTR ascii,AL// AL contains the ASCII code
-    } //asm
-
-    ascii = 0;
-    if (scan == 0x48) { // Up arrow or W
-        ascii = 'w';
+        if (scan == 75) { entered_ascii_codes[++tail] = 'a'; }
+        if (scan == 72) { entered_ascii_codes[++tail] = 'w'; }
+        if (scan == 77) { entered_ascii_codes[++tail] = 'd'; }
+        if (scan == 1) quit_game();
     }
-    else if (scan == 0x4B) { // Left Arrow
-        ascii = 'a';
-    }
-    else if (scan == 0x4D) { // Right Arrow
-        ascii = 'd';
-    }
-    if (scan == 1) { // Esc
-        game_running = 0; // terminate program
-    }
-    next_cm = ascii;
-    // if ((ascii != 0) && (tail < ARRSIZE))
-    // {
-    //     entered_ascii_codes[++tail] = ascii;
-    // } // if
 
-Skip1:
-
-} // new_int9
+    outport(0x20, 0x20); // End Of Interrupt (EOI)
+}
 
 void displayer(void)
 {
@@ -158,23 +129,23 @@ void displayer(void)
 } // displayer
 
 
-// void receiver()
-// {
-//     // char temp;
-//     // while(tail > -1)
-//     // {
-//     //     temp = entered_ascii_codes[tail];
-//     //     rear++;
-//     //     tail--;
-//     //     // if (rear < ARRSIZE) {
-//     //     //     ch_arr[rear] = temp;
-//     //     // }
-//     //     // if (front == -1) {
-//     //     //     front = 0;
-//     //     // }
-//     // } // while
+void receiver()
+{
+    char temp;
+    while(tail > -1)
+    {
+        temp = entered_ascii_codes[tail];
+        rear++;
+        tail--;
+        if (rear < ARRSIZE) {
+            ch_arr[rear] = temp;
+        }
+        if (front == -1) {
+            front = 0;
+        }
+    } // while
 
-// } // receiver
+} // receiver
 
 // CHANGE
 void update_ship_pos()
@@ -224,14 +195,13 @@ void update_ship_pos()
                             if (score >= 600) {
                                 game_over = 1;
                             } else {
-                                
                                 memset(terrain, 0, sizeof(terrain));
                                 make_terrain(terrain,score);
                                 ship_pos.x = 2;
                                 ship_pos.y = 0;
                                 ship_vel.x = 1;
                                 ship_vel.y = 0;
-                        }
+                            }
                         }else{
                             // ship did not land on flat surface - hit obstacle
                             // minus 50 points
@@ -278,21 +248,11 @@ void render_col(int col, int row, char c, int attr) {
 
 void updater()
 {
-    int input_w = 0;
-    int input_d = 0;
-    int input_a = 0;
+    int input_w = 0, input_d = 0, input_a = 0;
     int i,j;
     int show_exhaust = 0;
     static int initial_run = 1;
     int x = ship_pos.x, y = ship_pos.y;
-    
-char ship[][6] = {
-        "  _",
-        " | |",
-        " (_)",
-        "//_\\\\"
-    };
-
 
     if (initial_run == 1) {
         initial_run = 0;
@@ -302,7 +262,6 @@ char ship[][6] = {
 
     update_ship_pos();
 
-    ch = 0;
     for(i=0; i < 25; i++) {
         for(j=0; j < 80; j++) {
             char c = terrain[i][j];
@@ -316,67 +275,60 @@ char ship[][6] = {
         }
     }
 
-   // while(front != -1)  {//Keep looping as long as the queue is not empty
-        // ch = ch_arr[front];//take the first char
-        // if(front != 0) {
-        //     front++;
-        // } else {
-        //     front = rear = -1;
-        // }
+   while(front != -1)  {//Keep looping as long as the queue is not empty
+        char ch = ch_arr[front];//take the first char
+        if(front != 0) {
+            front++;
+        } else {
+            front = rear = -1;
+        }
 
-        if (next_cm == 'w' || next_cm == 'W') input_w = 1;
-        if (next_cm == 'd' || next_cm == 'D') input_d = 1;
-        if (next_cm == 'a' || next_cm == 'A') input_a = 1;
-    //}// while(front != -1)
-        if ((input_w) && fuel > 0 &&  flag == 0) {
-            if (ship_vel.y > -3 ) {
-                // for some reason the speed here is backwards meaning minus speed means going up- 
-                //in the diplayer i made it so positive velocity meanst up
-                ship_vel.y--;
-                ship_vel.y--;
-                show_exhaust = 1;
-                fuel--;
-                
-                
-            }
-           
-            
-        }
-        if ((input_d) && fuel > 0 && ship_vel.x <=2  &&  flag == 0) {
-            ship_vel.x++;
-            show_exhaust = 3;
-            fuel--;
-            
-        }
-        if ((input_a) && fuel > 0 && ship_vel.x >=-2  &&  flag == 0) {
-            ship_vel.x--;
-            show_exhaust = 2;
-            fuel--;
-            
-        }
-        input_w = 0;
-        input_d = 0;
-        input_a = 0;
-        next_cm = 0;
+        if (ch == 'w' || ch == 'W') input_w = 1;
+        if (ch == 'd' || ch == 'D') input_d = 1;
+        if (ch == 'a' || ch == 'A') input_a = 1;
+    }// while(front != -1)
 
-        for (i = 0; i < 4; i++) {
-            char* s = ship[i];
-            for (j = 0; j < strlen(s); j++) {
-                char c = s[j];
-                if (c != ' ') {
-                    display_draft[y + i][x - 2 + j] = c;
-                }
+    if ((input_w) && fuel > 0) {
+        if (ship_vel.y > -3 ) {
+            // for some reason the speed here is backwards meaning minus speed means going up- 
+            //in the diplayer i made it so positive velocity meanst up
+            ship_vel.y--;
+            ship_vel.y--;
+            show_exhaust |= 8;
+            fuel--;
+        }
+    }
+    if ((input_d) && fuel > 0 && ship_vel.x <=2 ) {
+        ship_vel.x++;
+        show_exhaust |= 4;
+        fuel--;
+        
+    }
+    if ((input_a) && fuel > 0 && ship_vel.x >=-2 ) {
+        ship_vel.x--;
+        show_exhaust |= 2;
+        fuel--;
+        
+    }
+
+    for (i = 0; i < 4; i++) {
+        char* s = ship[i];
+        for (j = 0; j < strlen(s); j++) {
+            char c = s[j];
+            if (c != ' ') {
+                display_draft[y + i][x - 2 + j] = c;
             }
         }
+    }
 
     // Will be the exhaust fire
-   if (show_exhaust == 1) {
+   if (show_exhaust & 8) {
         render_col(x-1, y+4, '\\', 0x0c);
         render_col(x+1, y+4, '/', 0x0c);
         render_col(x, y+5, 'v', 0x0c);
     }
     // 2. Left exhaust
-    else if (show_exhaust == 2) {
+    else if (show_exhaust & 4) {
         render_col(x+4, y+1, '\\', 0x0c); 
         render_col(x+4, y+2, '=', 0x0e);  
         render_col(x+5, y+2, '>', 0x0c);  
@@ -384,7 +336,7 @@ char ship[][6] = {
     }
     
     // 3. Right  exhaust
-    else if (show_exhaust == 3) {
+    else if (show_exhaust & 2) {
         render_col(x-3, y+1, '/', 0x0c);  
         render_col(x-3, y+2, '=', 0x0e);  
         render_col(x-4, y+2, '<', 0x0c);  
@@ -419,12 +371,12 @@ void main() {
 
     make_terrain(terrain,score);
 
-    while(game_running) {
+    while(1) {
         displayer();
-        // receiver();
+        receiver();
         updater();
    
-        delay(300);
+        delay(150);
         // sleep(1);
     } // while
     setvect(9, old_int9);
