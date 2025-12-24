@@ -7,9 +7,14 @@
 
 void make_terrain(int terrain[25][80], int diff) {
     int i;
+    int difficulty;
     int ascending = 1, curr_y = 24;
     int flat_1_index, flat_2_index;
-    int sizeof_ = 10 / diff; 
+    int sizeof_;
+    
+    if (diff > 1) { difficulty = 2;}
+    else difficulty = 1;
+    sizeof_ = 10 / difficulty; 
     // Generate two points to put flat surfaces. Could try generalizing it to put more than 2 flat surfaces
     // We put them in two separate halves to separate them
     srand(time(NULL));

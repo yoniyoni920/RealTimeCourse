@@ -19,7 +19,7 @@ typedef struct position
 } POSITION;
 
 void interrupt (*old_int9)(void);
-
+int key_locked[128] = {0}; 
 char entered_ascii_codes[ARRSIZE];
 int front = -1;
 int rear = -1;
@@ -84,28 +84,44 @@ void reset_game() {
     start_game();
 }
 
+
+
 void interrupt new_int9(void)
 {
+    
+    /*
+    when i key is pressed allow do its action on press but lock it until its unpressed to avoid duplication of orders
+    
+    */
     unsigned char scan;
+    unsigned char key_index;
 
-    scan = inport(0x60);   // Read raw scan code
+    scan = inport(0x60); 
 
+    
     if (scan & 0x80) {
-        // KEY RELEASE
-        scan &= 0x7F;   // remove release bit
+       
+        key_index = scan & 0x7F;
+        key_locked[key_index] = 0;
+    } 
+    else {
+   
+        if (key_locked[scan] == 0) {
+            
+          
+            if (scan == 75) { entered_ascii_codes[++tail] = 'a'; }
+            else if (scan == 72) { entered_ascii_codes[++tail] = 'w'; }
+            else if (scan == 77) { entered_ascii_codes[++tail] = 'd'; }
+            else if (scan == 0x1C && game_over) { reset_game(); }
+            else if (scan == 1) quit_game();
 
-        if (scan == 75) { entered_ascii_codes[++tail] = 'a'; }
-        else if (scan == 72) { entered_ascii_codes[++tail] = 'w'; }
-        else if (scan == 77) { entered_ascii_codes[++tail] = 'd'; }
-        else if (scan == 0x1C) { 
-            if (game_over) {
-                reset_game();
-            }   
+
+            key_locked[scan] = 1;
         }
-        else if (scan == 1) quit_game();
+ 
     }
 
-    outport(0x20, 0x20); // End Of Interrupt (EOI)
+    outport(0x20, 0x20); 
 }
 
 void displayer(void)
@@ -115,6 +131,8 @@ void displayer(void)
     char c;
     
     char hud_text[81];
+    char *text_difficulty;
+    int difficlty_shines;
     char msg_score[40];
     char msg_gameover[] = "GAME OVER";
     char press_enter[] = "PRESS ENTER TO CONTINUE";
@@ -122,12 +140,19 @@ void displayer(void)
     //     b800h[2*i+1] = 0x08; // black over white
     // }
     if(!game_over){
-        int x_pos = 5;
-        sprintf(hud_text, "Fuel:%4d   Altitude:%2d   X.speed:%2d   Y.Speed:%2d Score:%4d  Lives:%2d", 
-                fuel, (20 - ship_pos.y), ship_vel.x * diff, ship_vel.y * diff,score,lives);
+        int x_pos = 2;
+        if(diff == 1) text_difficulty = "Easy";
+        else if(diff == 2) text_difficulty = "Medium";
+        else text_difficulty = "Hard";
+
+        
+        sprintf(hud_text, "Fuel:%4d Alt:%2d X.Velocity:%2d Y.Velocity:%2d Score:%4d Lives:%d Diff:%s", 
+                fuel, (20 - ship_pos.y), ship_vel.x * diff, ship_vel.y * diff, score, lives, text_difficulty);
         for(i = 0; i < strlen(hud_text); i++) {
-            display_draft[1][x_pos+i] = hud_text[i];
-            color_draft[1][x_pos+i] = 0x1F;
+            if (x_pos+i < 80) {
+                display_draft[1][x_pos+i] = hud_text[i];
+                color_draft[1][x_pos+i] = 0x1F;
+            }
         }
 
 
@@ -180,7 +205,26 @@ void receiver()
     } // while
 
 } // receiver
-
+void animate_explosion(int x, int y) {
+    int frame, i;
+    
+    char explosion_chars[] = {'*', '@', '#', '.', '+', 'x'};
+    
+    for (frame = 0; frame < 4; frame++) {
+        for (i = 0; i < 15; i++) {
+            int dx = (rand() % (frame * 4 + 1)) - (frame * 2);
+            int dy = (rand() % (frame * 2 + 1)) - frame;
+            int ex = x + dx;
+            int ey = y + dy;
+            if (ex >= 0 && ex < 80 && ey >= 0 && ey < 25) {
+                display_draft[ey][ex] = explosion_chars[rand() % 6];
+                color_draft[ey][ex] = (rand() % 2 == 0) ? 0x0C : 0x0E;
+            }
+        }
+        displayer(); 
+        delay(100); 
+    }
+}
 // CHANGE
 void update_ship_pos()
 {
@@ -209,7 +253,7 @@ void update_ship_pos()
         if (ship_pos.y+3 > 20) {
             for(i=20; i < 25; i++) {
                 for(j=0; j < 80; j++) {
-                    if (terrain[i][j] != NULL && j >= ship_pos.x && j <= ship_pos.x+5 && i <= ship_pos.y+3 && i >= ship_pos.y) {
+                    if (terrain[i][j] != NULL && j >= ship_pos.x-2 && j <= ship_pos.x+2 && i <= ship_pos.y+3 && i >= ship_pos.y) {
                         //NULL is 0 which is nothing (air), so if we are not in air and - 
                         //Is point j between the left and right walls of the ship?
                         //Is point i between the roof and the floor of the ship?
@@ -227,19 +271,22 @@ void update_ship_pos()
                             if (passes == 3) {
                                 diff++; // Increase game's difficulty
                             }
+                            if (passes == 6) {
+                                diff++; // Increase game's difficulty
+                            }
                             start_game();
                         }else{
                             // ship did not land on flat surface - hit obstacle
                             // minus 50 points
                             lives--;
                             score-=50;
-
+                            animate_explosion(ship_pos.x, ship_pos.y);
                             if (fuel <= 0 || lives <= 0) {
                                 game_over = 1; 
                             } else {
                                 passes = 0;
                                 if (diff > 1) {
-                                    diff--;
+                                    diff = 1;
                                 }
                                 // Retry
                                 start_game();
