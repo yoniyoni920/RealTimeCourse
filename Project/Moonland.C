@@ -33,7 +33,7 @@ unsigned char far *b800h;
 int color_draft[25][80]; // Same as display draft but for coloring
 POSITION ship_pos;
 POSITION ship_vel;
-
+int showship =1;
 int passes = 0;
 int score = 0;
 int lives = 3;
@@ -72,6 +72,7 @@ void start_game() {
     ship_pos.y = 0;
     ship_vel.x = 1;
     ship_vel.y = 1;
+    showship = 1; // make the ship apearent at the start of the round
 }
 
 void reset_game() {
@@ -123,7 +124,21 @@ void interrupt new_int9(void)
 
     outport(0x20, 0x20); 
 }
+void draw_background() {
+    int i, j;
+    for(i=0; i < 25; i++) {
+        for(j=0; j < 80; j++) {
+            char c = terrain[i][j];
+            if (c != NULL) {
+                display_draft[i][j] = c;
+            } else {
+                display_draft[i][j] = ' ';  // blank
+            }
 
+            color_draft[i][j] = 0x0f;  // blank
+        }
+    }
+}
 void displayer(void)
 {
     int i;
@@ -224,6 +239,7 @@ void animate_explosion(int x, int y) {
         displayer(); 
         delay(100); 
     }
+    
 }
 // CHANGE
 void update_ship_pos()
@@ -260,10 +276,10 @@ void update_ship_pos()
                         //Together we get answer to the question is there something inside the ship? - did we hit anything?
                         ship_vel.x = 0;// stop the ship
                         ship_vel.y = 0;
-
+                       
                     
-                        if (terrain[i][j] == '_') {// landed saftly
-                            //print you landed saftly got 100 points and 10 fuel
+                        if (j >= 2 && j <= 77 &&terrain[i][ship_pos.x] == '_' && terrain[i][ship_pos.x-2] == '_' && terrain[i][ship_pos.x-1] == '_' && terrain[i][ship_pos.x+2] == '_' && terrain[i][ship_pos.x+1] == '_' && ship_vel.y <= 1) {// landed saftly also ship needs to land slowly
+                            //you landed saftly got 100 points and 10 fuel
                             //if you get too 300 points you win message end game
                             passes++;
                             score+=100;
@@ -276,10 +292,12 @@ void update_ship_pos()
                             }
                             start_game();
                         }else{
+                            showship = 0;// dont show the ship
                             // ship did not land on flat surface - hit obstacle
                             // minus 50 points
                             lives--;
                             score-=50;
+                            draw_background();// makes the ship disapear during exploition
                             animate_explosion(ship_pos.x, ship_pos.y);
                             if (fuel <= 0 || lives <= 0) {
                                 game_over = 1; 
@@ -331,19 +349,8 @@ void updater()
     }
 
     update_ship_pos();
-
-    for(i=0; i < 25; i++) {
-        for(j=0; j < 80; j++) {
-            char c = terrain[i][j];
-            if (c != NULL) {
-                display_draft[i][j] = c;
-            } else {
-                display_draft[i][j] = ' ';  // blank
-            }
-
-            color_draft[i][j] = 0x0f;  // blank
-        }
-    }
+    draw_background();
+    
 
    while(front != -1)  {//Keep looping as long as the queue is not empty
         char ch = ch_arr[front];//take the first char
@@ -376,13 +383,14 @@ void updater()
         fuel--;
         
     }
-
-    for (i = 0; i < 4; i++) {
-        char* s = ship[i];
-        for (j = 0; j < strlen(s); j++) {
-            char c = s[j];
-            if (c != ' ') {
-                display_draft[y + i][x - 2 + j] = c;
+    if (showship){
+        for (i = 0; i < 4; i++) {
+            char* s = ship[i];
+            for (j = 0; j < strlen(s); j++) {
+                char c = s[j];
+                if (c != ' ') {
+                    display_draft[y + i][x - 2 + j] = c;
+                }
             }
         }
     }
