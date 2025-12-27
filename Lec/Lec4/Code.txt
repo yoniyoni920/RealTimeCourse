@@ -1,0 +1,733 @@
+//;
+//; cursor8.c
+//;
+//;This program demonstrates cursor manipulation.
+//;
+//;
+
+#include <stdio.h>
+#include <dos.h>
+//#include <conio.h>
+
+
+
+
+
+int CursorPos;
+int Base;
+int Cursor_Sizes[]  = {0x0407,0x0205,0x0306,0x000F,0x010F,0x020F,0x030F,0x040F,
+                         0x050F,0x060F,0x070F,0x080F,0x090F,0x0A0F,0x0B0F,0x0C0F,
+                         0x0D0F,0x0E0F,0x000E,0x010E,0x020E,0x030E,0x040E,0x050E,
+                         0x060E,0x070E,0x080E,0x090E,0x0A0E,0x0B0E,0x0C0E,0x0D0E,
+                         0x0C0D,0x0B0D,0x0A0D,0x090D,0x080D,0x070D,0x060D,0x050D,
+                         0x040D,0x030D,0x020D,0x010D,0x010C,0x020C,0x030C,0x040C,
+                         0x050C,0x060C,0x070C,0x080C,0x090C,0x090C,0x0A0C,0x0B0C,
+                         0x0A0B,0x090B,0x080B,0x070B,0x060B,0x050B,0x040B,0x030B,
+                         0x020B,0x010B,0x010A,0x020A,0x030A,0x040A,0x050A,0x060A,
+                         0x070A,0x080A,0x090A,0x0809,0x0709,0x0609,0x0509,0x0409,
+                         0x0309,0x0209,0x0109,0x0108,0x0208,0x0308,0x0408,0x0508,
+                         0x0708,0x0607,0x0507,0x0407,0x0307,0x0207,0x0107,0x0106,
+                         0x0608,0x0206,0x0306,0x0406,0x0506,0x0405,0x0305,0x0205,
+                         0x0104,0x0204,0x0304,0x0203,0x0103,0x0203,0x0102,0x0002,
+                         0x0105,0x0001 };
+
+
+void SetCursorPos(int pos)
+{
+ int ax;
+
+ax = 14 +  ((pos) & (0xFF00));
+
+outport(0x3D4, ax);
+
+
+
+ax = 15 +  (pos & (0xFF))*256  ;
+
+outport(0x3D4, ax);
+
+
+} // SetCursorPos
+
+
+
+void SetCurSize(int currsize)
+{
+ int ax;
+
+
+ax = 10  + (currsize & 0xFF00);
+outport(0x3D4, ax);
+
+ax = 11  + (currsize & 0xFF)*256 ;
+outport(0x3D4, ax);
+
+
+} // SetCurSize
+
+int main()
+{
+
+  int  far *b800h;
+  int value, i, ax, flag, si, ch1;
+  union REGS regs;
+
+//;PART1 : INITIALIZE THE DISPLAY ADAPTER
+//;
+
+// Set window to 25x40 
+
+  regs.h.ah = 0;
+  regs.h.al = 1;
+  int86(0x10, &regs, &regs);
+ 
+
+
+
+//  0B800H     ; SEGMENT ADDRESS OF MEMORY ON COLOR ADAPTER
+//;
+//  SET UP EXTRA SEGMENT REGISTER
+//  ' ' CHARACTER SPACE TO FILL ADAPTER MEMORY
+//   ATTRIBUTE BYTE : INTENSE YELLOW
+//;
+//; WRITE 'A' IN MID SCREEN
+//;
+//  MOV              BYTE PTR ES:[2*(12*40+20)],'A'
+//;
+
+ ((unsigned long int)b800h) = 0xB800 * 65536; 
+
+   value = ' ' + 256*14;  // space + ATTRIBUTE BYTE : INTENSE YELLOW BLACK BACKGROUND
+
+
+for(i=0; i < 1000; i++)
+  {
+    b800h[i] = value;
+  } // for
+
+b800h[12*40+20] = b800h[12*40+20]  + 'A' - ' '; 
+
+//; SET THE CURSOR ADDRESS REGISTERS
+
+SetCursorPos(12*40+20);
+
+
+
+si = 0;
+
+while(1)
+{
+   ax = Cursor_Sizes[si];
+   SetCurSize(ax);
+   si++;
+   if (si >= 114)
+    si = 0;
+ 
+// Wait for key strike
+
+  regs.h.ah = 0;
+  int86(0x16, &regs, &regs);
+  if (regs.h.ah == 1)
+      break;
+
+} // while(1)
+
+// Return:
+
+// Reset window to 25x80 
+
+  regs.h.ah = 0;
+  regs.h.al = 2;
+  int86(0x10, &regs, &regs);
+ 
+
+} // main
+// sound2a.c
+#include <dos.h>
+#include <stdio.h>
+
+#define ON (1)
+#define OFF (0)
+
+volatile int count;
+
+void interrupt newint8(void)
+{
+   count++;
+ //  asm {
+ //       MOV AL,20h
+ //       OUT 20h,AL
+ //      }
+ outportb(0x20, 0x20);
+
+} // newint8(void)
+
+void interrupt (*int8save)(void);
+
+void mydelay(int n)
+{
+
+  char value;
+
+   //     asm {
+   //       CLI
+   //       PUSH AX
+   //       MOV AL,016h
+   //       OUT 43h,AL
+   //       MOV AX,11932
+   //       OUT 40h,AL
+   //       MOV AL,026h
+   //       OUT 43h,AL
+   //       MOV AX,11932
+   //       MOV AL,AH
+   //       OUT 40h,AL 
+   //       POP AX
+   //     } // asm
+
+   
+  outportb( 0x43, 0x16);
+  value = (11932 & 0xFF);
+  outportb( 0x40, value);
+
+  outportb( 0x43, 0x26);
+  value = (11932 / 256);
+  outportb( 0x40, value);
+
+    int8save = getvect(8);
+    setvect(8,newint8);
+  //  asm  { STI};
+    count = 0;
+    while(count <= n*100)
+        ;
+
+    //    asm {
+    //      CLI
+    //      PUSH AX
+    //      MOV AL,016h
+    //      OUT 43h,AL
+    //      MOV AX,0
+    //      OUT 40h,AL
+    //      MOV AL,026h
+    //      OUT 43h,AL
+    //      MOV AL,0
+    //      OUT 40h,AL 
+    //      POP AX
+    //    } // asm
+
+
+
+   outportb( 0x43, 0x16);
+   outportb( 0x40, 0);
+
+   outportb( 0x43, 0x26);
+   outportb( 0x40, 0);
+
+    setvect(8,int8save);
+
+
+} //mydelay
+
+
+
+/*------------------------------------------------
+ ChangeSpeaker - Turn speaker on or off. */
+
+ void ChangeSpeaker( int status )
+ {
+  int portval;
+
+      portval = 0;
+
+//   asm {
+//        PUSH AX
+//        IN AL,61h
+//        MOV byte ptr portval,AL
+//        POP AX
+//       }
+
+   portval = inportb( 0x61 );
+
+
+    if ( status==ON )
+     portval |= 0x03;
+      else
+       portval &=~ 0x03;
+     //   asm {
+     //    PUSH AX
+     //     MOV AX,portval
+     //     OUT 61h,AL
+     //     POP AX
+     //   } // asm
+    
+   outportb( 0x61, portval );
+  
+
+	} /*--ChangeSpeaker( )----------*/
+
+	void Sound( int hertz )
+	{
+	 unsigned divisor = 1193180L / hertz;
+
+	  ChangeSpeaker( ON );
+
+ //       asm {
+ //         PUSH AX
+ //         MOV AL,096h
+ //         OUT 43h,AL
+ //         POP AX
+ //       } // asm
+
+      outportb( 0x43, 0x96 );
+
+
+  //      asm {
+  //        PUSH AX
+  //        MOV AX,divisor
+  //        AND AX,0FFh
+  //        OUT 42h,AL
+  //        POP AX
+  //      } // asm
+
+    outportb( 0x42, divisor & 0xFF ) ;
+
+
+
+//        asm {
+//          PUSH AX
+//          MOV AL,0A6h
+//          OUT 43h,AL
+//          POP AX
+//        } // asm
+
+ outportb( 0x43, 0xA6 ) ;
+
+  //      asm {
+  //        PUSH AX
+  //        MOV AX,divisor
+  //        MOV AL,AH
+  //        OUT 42h,AL
+  //        POP AX
+  //      } // asm
+
+       outportb( 0x42, divisor >> 8 ) ;
+
+	     } /*--Sound( )-----*/
+
+      void NoSound( void )
+        {
+             ChangeSpeaker( OFF );
+        } /*--NoSound( )------*/
+
+       int main( void )
+        {
+           Sound( 355 );
+           mydelay( 2 );
+           Sound( 733 );
+           mydelay( 2 );
+           Sound( 355 );
+           mydelay( 2 );
+           Sound( 733 );
+           mydelay( 2 );
+
+           NoSound( );
+           return(0);
+        } /*--main( )-------*/
+
+//    clk3.c
+
+#include <stdio.h>
+#include <dos.h>
+
+void interrupt TIMER(void);
+int COUNT100 = 100;
+char TENHOUR;
+char HOURS;
+char TENMIN;
+char MINUTES; 
+char TENSEC;
+char SECONDS;
+char OLDMASK;
+void interrupt (*origint8isr)(void); // pointer to function
+union REGS regs;
+struct REGPACK regpack;
+
+int main(int argc, char *argv[])
+{
+  char  value;
+  int flag;
+
+   printf("argv[1] = %s\n", argv[1]);
+
+   TENHOUR = argv[1][0];
+    HOURS = argv[1][1];
+    TENMIN = argv[1][3];
+     MINUTES = argv[1][4];
+     TENSEC = argv[1][6];
+      SECONDS = argv[1][7];
+
+
+   origint8isr = getvect(8);
+   setvect(8, TIMER);
+
+
+
+//TIMER COMMAND: SELECT CHANNEL 0;
+//                   ;                READ / WRITE LSB
+//                   ;                MODE 3: BINARY
+// 0x36 =  0000 0000 0011 0000
+
+   outportb( 0x43, 0x36);
+
+//       11932  ; DESIRED COUNT VALUE FOR 100HZ RESULT
+
+//    TRANSFER THE LSB 
+
+value = (11932 & 0xFF);
+
+outportb( 0x40, value);
+
+//    TRANSFER THE MSB 
+
+value = (11932 / 256);
+outportb( 0x40, value);
+
+
+flag = 1;
+while(flag == 1)
+{
+  char temp;
+
+    putchar(TENHOUR);
+    putchar(HOURS);
+    putchar(':');
+    putchar(TENMIN);
+    putchar(MINUTES);
+    putchar(':');
+    putchar(TENSEC);
+    putchar(SECONDS);
+    putchar(13);
+
+    temp =  SECONDS;
+     // Wait for seconds to change
+    while (temp == SECONDS)
+          ;
+
+  regpack.r_ax = 256; 
+  intr(0x16, &regpack);
+  if ( (regpack.r_flags & 64) == 0)
+   {
+     // Read key
+      regs.h.ah = 0;
+      int86(0x16, &regs, &regs);
+      flag = 0;
+   } // if
+
+ 
+
+} // while(1)  
+
+// RESTORE INT8 FREQUENCY
+
+   outportb( 0x43, 0x36);
+   outportb( 0x40, 0);
+   outportb( 0x40, 0);
+
+
+   setvect(8, origint8isr);
+
+return 0;
+
+} // main
+
+  
+void interrupt TIMER(void)
+{
+  int incflag=0;
+
+      incflag = 0;
+      COUNT100--;
+      if (COUNT100 <= 0)
+       {
+           COUNT100 = 100;
+            incflag = 1;
+       } // if 
+
+  if (incflag == 0)
+     goto noinc;
+
+   if ( (SECONDS == '9') && (TENSEC == '5' ) && (MINUTES == '9') && (TENMIN == '5') &&
+      (HOURS == '3') && (TENHOUR == '2') )
+   {
+     SECONDS = TENSEC = MINUTES = TENMIN = HOURS = TENHOUR = '0';
+     goto noinc;     
+   } // if
+
+
+       if (SECONDS == '9')
+              {
+                SECONDS = '0';
+              }
+              else
+              {
+                SECONDS++;
+		goto noinc;
+              } // else
+
+         if  (TENSEC == '5' )
+                 {
+                    TENSEC = '0';
+                 }
+          else
+              {
+                TENSEC++;
+		goto noinc;
+              } // else
+
+          if (MINUTES == '9')
+             {
+                 MINUTES = '0';
+             }
+          else
+              {
+                MINUTES++;
+		goto noinc;
+              } // else
+            
+
+
+       if (TENMIN == '5')
+            {
+               TENMIN = '0';
+            } // if 
+          else
+              {
+                incflag = 0;
+                TENMIN++;
+		goto noinc;
+              } // else
+
+       if (HOURS == '9')
+            {
+               HOURS = '0';
+            } // if 
+          else
+              {
+                HOURS++;
+		goto noinc;
+              } // else
+
+       if (TENHOUR == '2')
+            {
+               TENHOUR = '0';
+            } // if 
+          else
+              {
+                TENHOUR++;
+              } // else
+
+noinc:
+
+       outportb( 0x20, 0x20 );
+ 
+} // TIMER
+
+//    clk2.c
+
+#include <stdio.h>
+#include <dos.h>
+
+void interrupt TIMER(void);
+int COUNT100 = 100;
+char TENHOUR;
+char HOURS;
+char TENMIN;
+char MINUTES; 
+char TENSEC;
+char SECONDS;
+char OLDMASK;
+void interrupt (*origint8isr)(void); // pointer to function
+union REGS regs;
+struct REGPACK regpack;
+
+int main(int argc, char *argv[])
+{
+  char  value;
+  int flag;
+
+   printf("argv[1] = %s\n", argv[1]);
+
+   TENHOUR = argv[1][0];
+    HOURS = argv[1][1];
+    TENMIN = argv[1][3];
+     MINUTES = argv[1][4];
+     TENSEC = argv[1][6];
+      SECONDS = argv[1][7];
+
+
+   origint8isr = getvect(8);
+   setvect(8, TIMER);
+
+
+
+//TIMER COMMAND: SELECT CHANNEL 0;
+//                   ;                READ / WRITE LSB
+//                   ;                MODE 3: BINARY
+// 0x16 =  0000 0000 0001 0000
+
+   outportb( 0x43, 0x16);
+
+//       11932  ; DESIRED COUNT VALUE FOR 100HZ RESULT
+value = (11932 & 0xFF);
+
+outportb( 0x40, value);
+
+outportb( 0x43, 0x26);
+
+
+//    TRANSFER THE MSB 
+
+value = (11932 / 256);
+outportb( 0x40, value);
+
+
+flag = 1;
+while(flag == 1)
+{
+  char temp;
+
+    putchar(TENHOUR);
+    putchar(HOURS);
+    putchar(':');
+    putchar(TENMIN);
+    putchar(MINUTES);
+    putchar(':');
+    putchar(TENSEC);
+    putchar(SECONDS);
+    putchar(13);
+
+    temp =  SECONDS;
+     // Wait for seconds to change
+    while (temp == SECONDS)
+          ;
+
+  regpack.r_ax = 256; 
+  intr(0x16, &regpack);
+  if ( (regpack.r_flags & 64) == 0)
+   {
+     // Read key
+      regs.h.ah = 0;
+      int86(0x16, &regs, &regs);
+      flag = 0;
+   } // if
+
+ 
+
+} // while(1)  
+
+// RESTOE INT8 FREQUENCY
+
+   outportb( 0x43, 0x16);
+   outportb( 0x40, 0);
+   outportb( 0x43, 0x26);
+   outportb( 0x40, 0);
+
+
+   setvect(8, origint8isr);
+
+return 0;
+
+} // main
+
+  
+void interrupt TIMER(void)
+{
+  int incflag=0;
+
+      incflag = 0;
+      COUNT100--;
+      if (COUNT100 <= 0)
+       {
+           COUNT100 = 100;
+            incflag = 1;
+       } // if 
+
+  if (incflag == 0)
+     goto noinc;
+
+   if ( (SECONDS == '9') && (TENSEC == '5' ) && (MINUTES == '9') && (TENMIN == '5') &&
+      (HOURS == '3') && (TENHOUR == '2') )
+   {
+     SECONDS = TENSEC = MINUTES = TENMIN = HOURS = TENHOUR = '0';
+     goto noinc;     
+   } // if
+
+
+       if (SECONDS == '9')
+              {
+                SECONDS = '0';
+              }
+              else
+              {
+                SECONDS++;
+		goto noinc;
+              } // else
+
+         if  (TENSEC == '5' )
+                 {
+                    TENSEC = '0';
+                 }
+          else
+              {
+                TENSEC++;
+		goto noinc;
+              } // else
+
+          if (MINUTES == '9')
+             {
+                 MINUTES = '0';
+             }
+          else
+              {
+                MINUTES++;
+		goto noinc;
+              } // else
+            
+
+
+       if (TENMIN == '5')
+            {
+               TENMIN = '0';
+            } // if 
+          else
+              {
+                incflag = 0;
+                TENMIN++;
+		goto noinc;
+              } // else
+
+       if (HOURS == '9')
+            {
+               HOURS = '0';
+            } // if 
+          else
+              {
+                HOURS++;
+		goto noinc;
+              } // else
+
+       if (TENHOUR == '2')
+            {
+               TENHOUR = '0';
+            } // if 
+          else
+              {
+                TENHOUR++;
+              } // else
+
+noinc:
+
+       outportb( 0x20, 0x20 );
+ 
+} // TIMER
+
+

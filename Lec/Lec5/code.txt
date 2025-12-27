@@ -1,0 +1,618 @@
+/* clk70h3.c */
+
+#include <stdio.h>
+#include <dos.h>
+
+
+
+int  convert_to_binary(int x)
+{
+ int i;
+ int temp, scale, result;
+ 
+
+  temp =0;
+  scale = 1;
+  for(i=0; i < 4; i++)
+   {
+     temp = temp + (x % 2)*scale;
+     scale *= 2;
+     x = x >> 1;
+   } // for
+
+  result = temp;
+  temp = 0;
+
+  scale = 1;
+  for(i=0; i < 4; i++)
+   {
+     temp = temp + (x % 2)*scale;
+     scale *= 2;
+     x = x >> 1;
+   } // for
+
+  temp *= 10;
+  result = temp + result;
+  return result;
+
+} // convert_to_binary
+
+volatile int global_flag;
+
+void interrupt (*old0x70isr)(void);
+
+int count = 0;
+
+void interrupt new0x70isr(void)
+{
+  char port70hsave;
+  char port71hsave;
+
+  count++;
+ if (count == 1000)
+ {
+  global_flag = 1;
+  count = 0;
+ } // if
+ 
+ 
+
+ port70hsave = inportb( 0x70 );
+ port71hsave = inportb( 0x71 );
+ outportb( 0x70, 0xC );
+ outportb( 0x70, 0x8C );
+ inportb( 0x71 );
+ outportb( 0x70, port70hsave );
+ outportb( 0x71, port71hsave );
+ 
+
+ outportb( 0xA0, 0x20 );
+ outportb( 0x20, 0x20 );
+
+
+} // new0x70isr
+
+void readclk(char str[])
+{
+  int i;
+  int hour, min, sec;
+
+
+  hour = min = sec = 0;
+
+
+ outportb( 0x70, 0);
+ ((char)sec)  = inportb( 0x71 );
+
+
+ outportb( 0x70, 2);
+ ((char)min)  = inportb( 0x71 );
+
+
+
+ outportb( 0x70, 4);
+ ((char)hour)  = inportb( 0x71 );
+
+
+  sec = convert_to_binary(sec);
+  min = convert_to_binary(min);
+  hour = convert_to_binary(hour);
+
+  sprintf(str,"%02d:%02d:%02d", hour, min, sec);
+
+} // readclk
+
+int main()
+{
+  char str[16], al;
+  int local_flag = 1, x71h1=0, x71h2=0, x71h3;
+  struct REGPACK regpack;
+  union REGS regs;
+
+  old0x70isr = getvect(0x70);
+  setvect(0x70, new0x70isr);
+
+
+ inportb(0x70);
+ outportb( 0x70, 0xA ) ;
+
+ inportb(0x70);
+ outportb( 0x70, 0x8A ) ;
+
+al = inportb(0x71);
+
+al = al & 0xF0;
+al = al | 6;
+outportb( 0x71, al );
+
+
+
+ inportb(0x70);
+ outportb( 0x70, 0xB ) ;
+ outportb( 0x70, 0x8B ) ;
+
+al = inportb(0x71);
+
+al = al & 0x8F;
+
+al = al | 0x42;
+
+
+outportb(0x71, al);
+
+
+al = inportb(0x21);
+al = al & 0xFB;
+outportb(0x21, al);
+
+
+   al = inportb(0x70);
+   al = 0xC;
+   outportb(0x70, al);
+
+
+   //inportb(0x71);
+   al = 0x8C;
+   outportb(0x70, al);
+
+
+   inportb(0x71);
+   al = 0xD;
+   outportb(0x70, al);
+   inportb(0x70);
+   al = 0x8D;
+   outportb(0x70, al);
+   inportb(0x71);
+   
+
+  printf("x71h1 = %x, x71h2 = %x, x72h3  = %x\n", x71h1, x71h2, x71h3);
+
+  while(local_flag)
+  {
+
+
+    putchar(13);
+    global_flag = 0;
+    while(global_flag == 0) // Wait for interrupt
+         ;                  // Do not print all the time
+    readclk(str);
+    printf(str);
+
+   regpack.r_ax = 256;
+   intr(0x16, &regpack);
+   local_flag = ((regpack.r_flags & 64) != 0);
+ 
+  } // while
+
+
+    regs.h.ah = 0;
+    int86(0x16, &regs, &regs);
+
+    
+
+   inportb(0x70);
+
+
+   al = 0xA;
+   outportb(0x70, al);
+
+   al = 0x8A;
+   outportb(0x70, al);
+
+
+    setvect(0x70, old0x70isr);
+
+
+}  // main
+// uck3h.c 
+
+#include <stdio.h>
+#include <dos.h>
+
+
+
+int  convert_to_binary(int x)
+{
+ int i;
+ int temp, scale, result;
+ 
+
+  temp =0;
+  scale = 1;
+  for(i=0; i < 4; i++)
+   {
+     temp = temp + (x % 2)*scale;
+     scale *= 2;
+     x = x >> 1;
+   } // for
+
+  result = temp;
+  temp = 0;
+
+  scale = 1;
+  for(i=0; i < 4; i++)
+   {
+     temp = temp + (x % 2)*scale;
+     scale *= 2;
+     x = x >> 1;
+   } // for
+
+  temp *= 10;
+  result = temp + result;
+  return result;
+
+} // convert_to_binary
+
+volatile int global_flag;
+
+void interrupt (*old0x70isr)(void);
+
+int count = 0;
+
+void interrupt new0x70isr(void)
+{
+  char port70hsave;
+  char port71hsave;
+  char al;
+
+ // global_flag = 1;
+ 
+ 
+
+ port70hsave = inportb( 0x70 );
+ port71hsave = inportb( 0x71 );
+ outportb( 0x70, 0xC );
+ al = inportb( 0x71 );
+  if ( (al & 0x10) != 0)
+      global_flag = 1;
+ 
+ outportb( 0x70, port70hsave );
+ outportb( 0x71, port71hsave );
+ 
+
+ outportb( 0xA0, 0x20 );
+ outportb( 0x20, 0x20 );
+
+
+} // new0x70isr
+
+void readclk(char str[])
+{
+  int i;
+  int hour, min, sec;
+
+
+  hour = min = sec = 0;
+
+
+ outportb( 0x70, 0);
+ ((char)sec)  = inportb( 0x71 );
+
+
+ outportb( 0x70, 2);
+ ((char)min)  = inportb( 0x71 );
+
+
+
+ outportb( 0x70, 4);
+ ((char)hour)  = inportb( 0x71 );
+
+
+  sec = convert_to_binary(sec);
+  min = convert_to_binary(min);
+  hour = convert_to_binary(hour);
+
+  sprintf(str,"%2d:%2d:%2d", hour, min, sec);
+
+} // readclk
+
+int main()
+{
+  char str[16], al;
+  int local_flag = 1, x71h1=0, x71h2=0, x71h3;
+  struct REGPACK regpack;
+  union REGS regs;
+
+  old0x70isr = getvect(0x70);
+  setvect(0x70, new0x70isr);
+
+
+ inportb(0x70);
+ outportb( 0x70, 0xA ) ;
+
+ inportb(0x70);
+ outportb( 0x70, 0x8A ) ;
+
+al = inportb(0x71);
+
+al = al & 0xF0;
+al = al | 6;
+outportb( 0x71, al );
+
+
+
+ inportb(0x70);
+ outportb( 0x70, 0xB ) ;
+ outportb( 0x70, 0x8B ) ;
+
+
+
+al = inportb(0x71);
+
+al = al & 0x8F;
+
+// al = al | 0x12;
+al = al | 0x52;
+
+
+outportb(0x71, al);
+   al = inportb(0x71);
+   
+
+al = inportb(0x21);
+al = al & 0xFB;
+outportb(0x21, al);
+
+
+   //al = 0xC;
+//   outportb(0x70, al);
+   outportb(0x70, 0xC);
+
+
+   inportb(0x70);
+   al = 0x8C;
+//   outportb(0x70, al);
+   outportb(0x70, 0x8C);
+   inportb(0x71);
+
+   al = 0xD;
+//   outportb(0x70, al);
+   outportb(0x70, 0xD);
+   al = 0x8D;
+//   outportb(0x70, al);
+   outportb(0x70, 0x8D);
+   inportb(0x71);
+   
+
+  printf("x71h1 = %x, x71h2 = %x, x72h3  = %x\n", x71h1, x71h2, x71h3);
+
+  while(local_flag)
+  {
+
+
+    putchar(13);
+    global_flag = 0;
+    while(global_flag == 0) // Wait for interrupt
+         ;                  // Do not print all the time
+    readclk(str);
+    printf(str);
+
+   regpack.r_ax = 256;
+   intr(0x16, &regpack);
+   local_flag = ((regpack.r_flags & 64) != 0);
+ 
+  } // while
+
+
+    regs.h.ah = 0;
+    int86(0x16, &regs, &regs);
+
+    
+
+   inportb(0x70);
+
+
+   al = 0xA;
+//   outportb(0x70, al);
+   outportb(0x70, 0xA);
+
+   al = 0x8A;
+//   outportb(0x70, al);
+   outportb(0x70, 0x8A);
+
+
+    setvect(0x70, old0x70isr);
+
+
+}  // main
+// uclk70h.c 
+
+#include <stdio.h>
+#include <dos.h>
+
+
+
+int  convert_to_binary(int x)
+{
+ int i;
+ int temp, scale, result;
+ 
+
+  temp =0;
+  scale = 1;
+  for(i=0; i < 4; i++)
+   {
+     temp = temp + (x % 2)*scale;
+     scale *= 2;
+     x = x >> 1;
+   } // for
+
+  result = temp;
+  temp = 0;
+
+  scale = 1;
+  for(i=0; i < 4; i++)
+   {
+     temp = temp + (x % 2)*scale;
+     scale *= 2;
+     x = x >> 1;
+   } // for
+
+  temp *= 10;
+  result = temp + result;
+  return result;
+
+} // convert_to_binary
+
+volatile int global_flag;
+
+void interrupt (*old0x70isr)(void);
+
+int count = 0;
+
+void interrupt new0x70isr(void)
+{
+  char port70hsave;
+  char port71hsave;
+
+  global_flag = 1;
+ 
+ 
+
+ port70hsave = inportb( 0x70 );
+ port71hsave = inportb( 0x71 );
+ outportb( 0x70, 0xC );
+ outportb( 0x70, 0x8C );
+ inportb( 0x71 );
+ outportb( 0x70, port70hsave );
+ outportb( 0x71, port71hsave );
+ 
+
+ outportb( 0xA0, 0x20 );
+ outportb( 0x20, 0x20 );
+
+
+} // new0x70isr
+
+void readclk(char str[])
+{
+  int i;
+  int hour, min, sec;
+
+
+  hour = min = sec = 0;
+
+
+ outportb( 0x70, 0);
+ ((char)sec)  = inportb( 0x71 );
+
+
+ outportb( 0x70, 2);
+ ((char)min)  = inportb( 0x71 );
+
+
+
+ outportb( 0x70, 4);
+ ((char)hour)  = inportb( 0x71 );
+
+
+  sec = convert_to_binary(sec);
+  min = convert_to_binary(min);
+  hour = convert_to_binary(hour);
+
+  sprintf(str,"%2d:%2d:%2d", hour, min, sec);
+
+} // readclk
+
+int main()
+{
+  char str[16], al;
+  int local_flag = 1, x71h1=0, x71h2=0, x71h3;
+  struct REGPACK regpack;
+  union REGS regs;
+
+  old0x70isr = getvect(0x70);
+  setvect(0x70, new0x70isr);
+
+
+ inportb(0x70);
+ outportb( 0x70, 0xA ) ;
+
+ inportb(0x70);
+ outportb( 0x70, 0x8A ) ;
+
+al = inportb(0x71);
+
+al = al & 0xF0;
+al = al | 6;
+outportb( 0x71, al );
+
+
+
+ inportb(0x70);
+ outportb( 0x70, 0xB ) ;
+ outportb( 0x70, 0x8B ) ;
+
+
+
+al = inportb(0x71);
+
+al = al & 0x8F;
+
+al = al | 0x12;
+
+
+outportb(0x71, al);
+   al = inportb(0x71);
+   
+
+al = inportb(0x21);
+al = al & 0xFB;
+outportb(0x21, al);
+
+
+   al = 0xC;
+   outportb(0x70, al);
+
+
+   inportb(0x70);
+   al = 0x8C;
+   outportb(0x70, al);
+   inportb(0x71);
+
+   al = 0xD;
+   outportb(0x70, al);
+   al = 0x8D;
+   outportb(0x70, al);
+   inportb(0x71);
+   
+
+  printf("x71h1 = %x, x71h2 = %x, x72h3  = %x\n", x71h1, x71h2, x71h3);
+
+  while(local_flag)
+  {
+
+
+    putchar(13);
+    global_flag = 0;
+    while(global_flag == 0) // Wait for interrupt
+         ;                  // Do not print all the time
+    readclk(str);
+    printf(str);
+
+   regpack.r_ax = 256;
+   intr(0x16, &regpack);
+   local_flag = ((regpack.r_flags & 64) != 0);
+ 
+  } // while
+
+
+    regs.h.ah = 0;
+    int86(0x16, &regs, &regs);
+
+    
+
+   inportb(0x70);
+
+
+   al = 0xA;
+   outportb(0x70, al);
+
+   al = 0x8A;
+   outportb(0x70, al);
+
+
+    setvect(0x70, old0x70isr);
+
+
+}  // main

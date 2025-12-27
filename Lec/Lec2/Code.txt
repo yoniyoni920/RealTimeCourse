@@ -1,0 +1,201 @@
+/* c_intr1f.c - Change keyboard key interrupt handler.
+   Pure C version.   */
+
+#include <stdio.h>
+#include <dos.h>
+
+volatile int Keystroke_Flag;
+int count;
+void interrupt (*Int9Save) (void);  /* Pointer to function */
+
+void interrupt Keystroke_Handler(void)
+   {
+	 (*Int9Save)();
+	 count++;
+	 if (count ==4)
+     Keystroke_Flag = 1;
+     printf("C: keyboard key has been pressed or released.\n");
+   } /* Keystroke_Handler */
+
+void main(void)
+ {
+   long int *lptr;
+
+   lptr = (void interrupt *)36;
+//   Int9Save = getvect(9);               /* Preserve old pointer */
+
+   Int9Save = (void interrupt *)(*lptr);               /* Preserve old pointer */
+
+//   setvect(9, Keystroke_Handler);       /* Set entry to new handler */
+
+   ((void interrupt *)(*lptr)) = Keystroke_Handler;
+
+   printf("C: Press keyboard key to continue.\n");
+
+   Keystroke_Flag = 0;
+   count = 0;
+   while (Keystroke_Flag == 0)
+       ;   /* Do nothing */
+
+   printf("C: Terminating ...\n");
+
+//   setvect(9,Int9Save);               /* Restore old pointer */
+
+   ((void interrupt *)(*lptr)) = Int9Save;
+
+
+ } /* main */
+/* mysleep2b.c - Implement sleep myself, Pure C version  */
+
+#include <stdio.h>
+#include <dos.h>
+
+volatile int My_Sleep_Counter;
+
+void interrupt (*Int8Save) (void);  /* Pointer to function */
+
+void interrupt My_Int8_Handler(void)
+   {
+
+   (*Int8Save)();  
+       
+     My_Sleep_Counter--;
+   } /* My_Int8_Handler */
+
+void my_sleep(int secs)
+{
+Int8Save = getvect(8);               /* Preserve old pointer */
+setvect(8, My_Int8_Handler);           /* Set entry to new handler */
+
+My_Sleep_Counter = secs*182/10;
+
+while(My_Sleep_Counter > 0)
+    ;
+setvect(8,Int8Save);               /* Restore old pointer */
+
+}  /* my_sleep */ 
+
+void main(void)
+ {
+  int secs;
+
+   printf("Enter sleep time in seconds:\n");
+   scanf("%d", &secs);
+
+   printf("sleeping ---\n");
+   
+   my_sleep(secs);
+
+
+   printf("Terminating ...\n");
+
+ } /* main */
+/* mysleep2b.c - Implement sleep myself, Pure C version  */
+
+#include <stdio.h>
+#include <dos.h>
+
+volatile int My_Sleep_Counter;
+
+void interrupt (*Int8Save) (void);  /* Pointer to function */
+
+void interrupt My_Int8_Handler(void)
+   {
+
+   (*Int8Save)();  
+       
+     My_Sleep_Counter--;
+   } /* My_Int8_Handler */
+
+void my_sleep(int secs)
+{
+Int8Save = getvect(8);               /* Preserve old pointer */
+setvect(8, My_Int8_Handler);           /* Set entry to new handler */
+
+My_Sleep_Counter = secs*182/10;
+
+while(My_Sleep_Counter > 0)
+    ;
+setvect(8,Int8Save);               /* Restore old pointer */
+
+}  /* my_sleep */ 
+
+void main(void)
+ {
+  int secs;
+
+   printf("Enter sleep time in seconds:\n");
+   scanf("%d", &secs);
+
+   printf("sleeping ---\n");
+   
+   my_sleep(secs);
+
+
+   printf("Terminating ...\n");
+
+ } /* main */
+/* dem_key9.c - Change Ctrl-Break interrupt handler.
+   Pure C version.   */
+
+#include <stdio.h>
+#include <dos.h>
+
+volatile int scan_code;
+volatile int Int9_flag;
+
+void interrupt (*Int9Save) (void);  /* Pointer to function */
+
+void interrupt Int9_Handler(void)
+   {
+       asm{
+       PUSH AX
+       MOV AX,0
+       IN AL,60h
+       TEST AL,80h
+       JNZ Skip2
+       MOV WORD PTR scan_code,AX
+       MOV Int9_flag,1
+     }
+    Skip2:
+     asm {
+       PUSHF
+       CALL  DWORD PTR Int9Save
+       POP AX
+     }
+
+
+   } /* Int9_Handler */
+
+void main(void)
+ {
+   Int9Save = getvect(9);           /* Preserve old pointer */
+   setvect(9, Int9_Handler);        /* Set entry to new handler */
+
+   do {
+        Int9_flag = 0;  
+        printf("Press any key (almost)\n:");
+
+         while (Int9_flag == 0)
+          ;   /* Do nothing */
+       
+        printf("You pressed key assigned"
+              " scan code = %d\n", scan_code);
+
+       asm {          // Erase character if 16h
+         MOV AH,1     // recognises it
+         INT 16h
+         JZ Skip3
+            MOV AH,0
+            INT 16h
+       } // asm
+      Skip3:
+
+
+
+     } while(scan_code != 1);
+
+
+   setvect(9,Int9Save);               /* Restore old pointer */
+
+ } /* main */

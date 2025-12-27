@@ -1,0 +1,129 @@
+/* ex9.c - xmain, Inc1, Inc2, Inc3, Pr */
+
+#include <conf.h>
+#include <kernel.h>
+
+/*------------------------------------------------------------------------
+ *  xmain  --  example of creating processes in PC-Xinu
+ *------------------------------------------------------------------------
+ */
+
+unsigned long int count1 = 0, count2 = 0, count3 = 0, count4=0;
+
+xmain()
+{
+    int Inc(), Pr();
+
+    resume( create(Inc, INITSTK, INITPRIO, "proc 1", 1, &count1) );
+    resume( create(Inc, INITSTK, INITPRIO, "proc 2", 1, &count2) );
+    resume( create(Inc, INITSTK, INITPRIO - 5, "proc 3", 1, &count3) );
+    resume( create(Inc, INITSTK, INITPRIO - 10, "proc 4", 1, &count4) );
+    resume( create(Pr, INITSTK, INITPRIO + 50, "proc 4", 0) );
+}
+
+/*------------------------------------------------------------------------
+ *  Inc  --  Increment counter via pointer
+ *------------------------------------------------------------------------
+ */
+Inc(int ptr)
+{
+  unsigned long int *ptr1;
+
+  ptr1 = (unsigned long int *)ptr;
+  while (1)
+     (*ptr1)++;
+
+}  /* Inc */
+
+Pr()
+{
+  char str[80];
+
+  while(1)
+  {
+    sleep(3);
+    sprintf(str, 
+"count1 = %lu, count2 = %lu, count3 = %lu, count4 = %lu\n",
+                       count1, count2, count3, count4);
+    printf(str);
+   } /* while */
+
+} /* Pr */
+/* resched.c - resched */
+
+#include <conf.h>
+#include <kernel.h>
+#include <proc.h>
+#include <q.h>
+
+
+/*------------------------------------------------------------------------
+ *  resched  --  reschedule processor to highest priority ready process
+ *
+ * Notes:	Upon entry, currpid gives current process id.
+ *		Proctab[currpid].pstate gives correct NEXT state for
+ *			current process if other than PRCURR.
+ *------------------------------------------------------------------------
+ */
+
+
+int	resched()
+{
+	register struct	pentry	*optr;	/* pointer to old process entry */
+	register struct	pentry	*nptr;	/* pointer to new process entry */
+        int next;
+
+// CHANGE
+
+     next = q[rdyhead].qnext;
+     while(next != rdytail)
+       {
+         if (next != 0)
+            q[next].qkey++;        
+         next = q[next].qnext;
+       } // while
+
+// END OF CHANGE
+
+
+	optr = &proctab[currpid];
+	if ( optr->pstate == PRCURR ) 
+         {
+		/* no switch needed if current prio. higher than next	*/
+		/* or if rescheduling is disabled ( pcxflag == 0 )	*/
+
+
+         if ( sys_pcxget() == 0 || lastkey(rdytail) < optr->pprio
+                 || ( (lastkey(rdytail) == optr->pprio) && (preempt > 0) ) )
+			return;
+
+
+		/* force context switch */
+		optr->pstate = PRREADY;
+		insert(currpid,rdyhead,optr->pprio);
+	} /* if */ 
+        else if ( sys_pcxget() == 0 ) 
+            {
+		kprintf("pid=%d state=%d name=%s",
+			currpid,optr->pstate,optr->pname);
+		panic("Reschedule impossible in this state");
+	    } /* else if */
+
+	/* remove highest priority process at end of ready list */
+
+        
+	nptr = &proctab[ (currpid = getlast(rdytail)) ];
+	nptr->pstate = PRCURR;		/* mark it currently running	*/
+
+// CHANGE
+
+	preempt = 3;		/* reset preemption counter	*/
+
+// CHANGE
+
+
+	ctxsw(&optr->pregs,&nptr->pregs);
+
+	/* The OLD process returns here when resumed. */
+	return;
+}

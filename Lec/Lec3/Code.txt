@@ -1,0 +1,717 @@
+// key6a.c
+
+#include <stdio.h>
+#include <dos.h>
+#include <conio.h>
+
+char ScanTable[] = { 0,1,'1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=',8,0,
+	  'Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P', '[', ']',13,0,
+	   'A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L', ';',0,0,0,0,
+	   'Z', 'X', 'C', 'V', 'B', 'N', 'M', ',','.', '/',0,0,0,
+	   ' ',0,0,0,0,0,0,0,0,0,0,0,0,0,
+	   '7', '8', '9', '-', '4', '5', '6', '+', '1', '2', '3', '0', '.' };
+
+char buffer;
+int buffer_flag;
+
+void interrupt Kbint(void);
+void interrupt (*SaveInt9Isr)(void); // pointer to function
+
+
+int main()
+{
+  SaveInt9Isr = getvect(9);
+  buffer_flag = 0;
+  setvect(9, Kbint);
+  buffer = 0;
+  while(buffer != 1)
+   {
+     while(buffer_flag == 0 )
+                ;
+     if (buffer != 1)
+      {
+         printf("%c", buffer);
+         if (buffer == 13) // Was it carrige return?
+            printf("%c", 10); // Yes it was, we must also display a line feed
+      }  // if
+    buffer_flag = 0;
+   } // while
+
+   setvect(9, SaveInt9Isr);
+
+return 0;
+
+} // main
+
+
+void interrupt Kbint(void)
+{
+  char scan_code, ascii_code, al;
+
+
+   
+  scan_code = inportb(0x60);
+  al = inportb(0x61);
+  al = al | 0x80;
+  outportb(0x61, al);
+  al = al & 0x7F;
+  outportb(0x61, al);
+  
+
+if ((scan_code & 0x80) != 0 ) // Is it a key being released?
+     ; // we ignore those
+else
+{
+  buffer = ScanTable[scan_code];
+  if (buffer != 0) // is it an ascii key?
+    buffer_flag = 1;
+} // else
+
+// Signal End Of Interrupt (EOI) to 8259 command register
+
+
+outportb(0x20, 0x20);
+
+
+} // Kbint
+
+----------------------------------------------------------------------------
+Ports 60H-63H: PC 8255 Parallel    I/O Port Chip for Keyboard and Status
+----------------------------------------------------------------------------
+Ports 60H-64H: PS/2 Intel 8042 Keyboard/Auxiliary Device Controller
+----------------------------------------------------------------------------
+
+The 8255 Parallel Port Controller and Programmable Peripheral Interface
+
+The 8255 chips control parallel    ports on the PC    system,    and acts as the
+Programmable Peripheral    Interface (PPI)    for the    CPU, occupying four
+consecutive port addresses 060H-063H.  The PPI can control three
+independent ports (A, B, and C)    as either input    or output.  The    fourth
+port address is    used as    a control port for the chip.  The following
+shows the meaning of a control byte sent to the    write-only control port:
+
+     bit              Value         Action
+
+       7   Mode Set    Flag          0     Inactive   1  Active
+     6,5   Mode Selection A         00     Mode 0       01  Mode 1    1x  Mode 2
+       4   Port A              0     Output        1  Input
+       3   Port C (upper 4 bits)  0     Output        1  Input
+       2   Mode Selection B          0     Mode 0        1  Mode 1
+       1   Port B              0     Output        1  Input
+       0   Port C (lower 4 bits)  0     Output        1  Input
+
+If bit 7 is 0, the byte    sent is    used to    set or reset a bit in port C.
+Mode 1 uses three port C lines for handshaking and interrupt control of
+port A.     For input, if PC4=0, port A latches data and PC5 goes high to
+indicate 'buffer full' for device connected to input lines.  PC5 returns
+low when the CPU reads port A.    If port    A interrupts are enabled, PC3
+also goes high when a byte is received,    which can be used for an IRn
+line to    an 8259A interrupt controller.    Port B functions like port A in
+mode 1 except it uses the three    low bits of port C for control.     Output
+in mode    1 is similar.  Mode 2 allows port A to operated    bidirectionally,
+with handshaking and interrupt control using five bits of port C.
+
+The PPI    Status Ports on    the IBM    PC compatibles at port addresses 060H to
+062H perform the following functions (all set to mode 0, A made    input, B
+output,    C input    by sending 099H    to 063H):
+
+060H Port A Input (acts    as a one byte device output register):
+
+    If PB7 = 0 Read    Keyboard Scan Code
+
+    If PB7 = 1 Read    switches
+           PA7,6   = SW1-8,7  # of drives
+           PA5,4   = SW1-6,5  monitor type
+                   11 = monochrome
+                   10 = 80x25 color
+                   01 = 40x25 color
+           PA3,2,0 = SW1-4,3,1 Reserved
+           PA1     = SW3       Math    chip mounted
+
+061H Port B Output (acts as a one byte device control register):
+
+           PB7 0 enable keyboard read
+           1 clear keyboard and    enable sense of    SW1
+           PB6 0 hold keyboard clock low, no shift reg. shifts
+           1 enable keyboard clock signal
+           PB5 0 enable i/o    check
+           1 disable i/o check
+           PB4 0 enable r/w    memory parity check
+           1 disable r/w parity    check
+           PB3 0 turn off LED
+           1 turn on LED (old cassettee    motor off)
+           PB2 0 read spare    key
+           1 read r/w memory size (from    Port C)
+           PB1 0 turn off speaker
+           1 enable speaker data
+           PB0 0 turn off timer 2
+           1 turn on timer 2, gate speaker with    square wave
+
+062H Port C Input (acts    as a one byte device output register):
+        (Set PB2 (PC) or PB3 (XT) first.)
+
+           PC7 0 no    parity error or    PB4=1
+           1 r/w memory    parity check error
+           PC6 0 no    i/o channel error or PB5=1
+           1 i/o channel check error
+           PC5 0 timer 2 output 0
+           1 timer 2 output 1
+           PC4   reserved (old cassettee data input)
+           PC3,2,1,0 = r/w memory (SW2-4,3,2,1) if PB2=1
+             =  spare key (SW2-8,7,6,5) if PB2=0
+
+       PC7 and PC6 are used by the NMI handler to tell whether RAM parity
+       error, i/o channel status error,    or, if both are    0, an 8087 error
+       occured.
+
+Example: Direct    reading    of PC keyboard scan code (replacement for INT 09):
+
+ 1. Read scan code.  Note that "make" key scan code has    bit 7=1,
+    "break" code has bit 7=0, except on    AT, for    which bit 7 is always 0,
+    a "break" produces a 0F0H code, then the key scan code.
+ 2. Send acknowledge to    keyboard by toggling bit 7 to 1, then back to 0.
+ 3. Put    keyboard in buffer.
+ 4. Signal EOI to the interrupt    controller.
+
+       pushall
+       in al,060h     ;    get key    code
+       push ax          ;    save it
+       in al,061h     ;    get current control
+       mov ah,al      ;    save PB    control
+       or al,80h      ;    set keyboard bit
+       out 061h,al    ;    keyboard acknowledge
+       xchg ah,al     ;    get back PB
+       out 061h,al    ;    reset PB control
+       pop ax          ;    get back code
+       ...          ;    save code in buffer
+       cli
+       mov al,20h
+       out 20h,al     ;    send eoi to interrupt controller
+       popall
+       iret
+
+The PS/2 8042 Keyboard/Auxiliary Device    Controller
+
+On the PS/2, an    Intel 8042 chip    replaces the 8255, using ports 60H and
+64H. Port 61H serves as    a system control port for compatibility    with the
+PC. The    8042 controls both the keyboard    and an auxiliary device, such as
+a mouse. It receives serial data, check    parity,    translates keyboard scan
+codes, and presents data at the    data port 60H.    The interface can
+interrupt the system (IRQ1) or can wait    for polling.  The I/O port 64H
+is the command/status port. A read gives status, a write is interpreted
+as a command.  The 8042    provides for a password    security mechanism.
+
+A read from port 64H gives the following status    byte:
+
+   Bit       Function
+    7       1 = Parity error
+    6       1 = General Time Out
+    5       1 = Auxiliary output    buffer full
+    4       1 = Inhibit switch
+    3       1 = Command/data
+    2       1 = System flag
+    1       1 = Input buffer full
+    0       1 = Output buffer full
+
+The status register can    be read    at any time.  The data port 60H    should
+be read    only when the output buffer full bit in    the status register is
+1. Data    should be written to the 8042 input buffer only    when the input
+buffer full bit    in the status register is 0.  If the auxiliary output
+buffer full bit    is 1, then the data read came from the auxiliary device.
+The command port 64H should be written to only when the    status register
+input buffer full bit and the output buffer full bit are 0.  Devices
+connected to the 8042 should be    disabled before    sending    a command that
+generates output.
+
+The following are recognized commands sent to port 64H:
+
+  20-3FH   Read    the 8042 RAM - Bits D5-D0 specify the address.
+           Address 0 is the    current    command    byte.
+
+  60-7FH   Write to the    8042 RAM   - Bits D5-D0    specify    the address.
+           Address 0 will mean the next byte of data out at    port 60H
+           is the command byte, defined using:
+
+          Bit     Function
+           7      Reserved = 0
+           6      1    = IBM keyboard translate mode
+           5      1    = Disable auxiliary device
+           4      1    = Disable keyboard
+           3      Reserved = 0
+           2      1    = Place    system flag in status register
+           1      1    = Enable auxiliary interrupt
+           0      1    = Enable keyboard interrupt
+
+    A4       Test    if password is installed.  Data    0FAH on    port 60H means
+       that    the password is    installed, 0F1H    means that the password
+       is not installed.
+
+    A5       Load    Security - initiate the    password load procedure.  Following
+       this    command    the 8042 will input from the data port until a
+       null    is detected.
+
+    A6       Enable Security - enable the    security feature, when the password
+       pattern is currently    loaded.
+
+    A7       Diable auxiliary device interface - set bit 5 of the    command
+       byte.
+
+    A8       Enable auxiliary device interface - reset bit 5 of the command
+       byte.
+
+    A9       Interface test - test the auxiliary device clock and    data lines.
+       The result is placed    in the output buffer at    60H:
+
+          Result      Meaning
+        00      No error
+        01      Aux. device clock line stuck low
+        02      Aux. device clock line stuck high
+        03      Aux. device data line    stuck low
+        04      Aux. device data line    stuck high
+
+    AA       Self    test - tests 8042.  A 55H is placed in output buffer if
+       no errors are detected.
+
+    AB       Interface test - cause the 8042 to test the keyboard    clock
+       and data lines.  Result reported as in command A9.
+
+    AC       Reserved
+
+    AD       Disable keyboard interface -    set bit    4 of the command byte.
+
+    AE       Enable keyboard interface - reset bit 4 of the command byte.
+
+    C0       Read    input port - read the 8042 input port and put it in the
+       output port.     If bit    3 is 0,    the fuse on the    +5 Vdc line
+       on the system board to the keyboard is open.
+
+    C1       Poll    input port low - put port 1 bits 0-3 in    status bits 4-7.
+
+    C2       Poll    input port high    - put port 1 bits 4-7 in status    bits 4-7.
+
+    D0       Read    output port - put data from output port    into the output
+       buffer.
+
+    D1       Write output    port - put next    byte written to    60H into the
+       output port.     Caution:  Bit 0 of the    output port is connected
+       to the System Reset line.  This bit should not be written low.
+
+    D2       Write keyboard output buffer    - put next byte    written    to 60H
+       into    output buffer and issue    device interrupt if enabled.
+       This    produces a simulated keyboard output.
+
+    D3       Write auxiliary device output buffer    - put next byte    written
+       to 60H input    buffer in output buffer    as if initiated    by the
+       auxiliary device and    issue interrupt    if enabled.
+
+    D4       Write to auxiliary device - transmit    next byte written to 60H
+       input buffer    to auxiliary device.
+
+    E0       Read    test inputs - cause the    8042 to    read its T0 and    T1 inputs.
+       This    data is    placed in the output buffer bits 0 and 1.
+
+  F0-FF       Pulse output    port - pulse bits 0-3 of the 8042 output port
+       for about 6 usec.  Bits 0 to    3 indicate which bits are to be
+       pulsed.  A 0    indicates bit should be    pulsed.     Caution:
+       Bit 0 of the    8042 output port is connected to the System Reset
+       line.  Pulsing this bit resets the system microprocessor.
+
+On the PS/2, the 8042 controller can pass commands to the keyboard
+through    port 60H:
+
+    ED       Set/reset status indicators.    Rresponse is ACK (0FAH), system
+       acceptance of ACK requires system to    raise clock and    data lines
+       for at least    500 usec.
+
+    EE       Echo    test (valid response is    EE)
+
+    EF       Invalid command
+
+    F0       Select alternate scan codes (response is ACK, system    then sends
+       option byte of 01, 02, or 03, response is ACK)
+
+    F1       Invalid command
+
+    F2       Read    keyboard ID (response is ACK plus two ID bytes of 83ABH)
+
+    F3       Set typematic rate/delay (response is ACK, system sends rate/delay
+       byte, response is ACK.  The rate/delay byte is:
+
+          bit      function
+
+           7       reserved    = 0
+          6-5      (delay/250msec -    1)
+          4-3      doubling    factor of rate
+          2-0      (rate/(240/sec) - 8)
+
+    F4       Enable (response is ACK, clears buffer, clears last typematic
+       key,    and starts scanning).
+
+    F5       Default disable (resets all conditions to power-on state, sends
+       ACK,    stops scanning).
+
+    F6       Set default (resets to power-on state, sends    ACK, sets default
+       key types for scan code 3, continues    scanning).
+
+  F7-FA       Set all keys    to typematic, make/break, make,    or typematic/make/
+       break for scan code 3 (responds with    ACK).
+
+  FB-FD       Set a key type to typematic,    make/break, or make (response is
+       ACK,    then keyboard prepares to receive key scan code    from set 3.
+
+    FE       Send    the previous output again.
+
+    FF       Reset the keyboard and start    internal self-test. Response is
+       ACK.     System    must acknowledge ACK by    raising    clock and data lines
+       for over 500    usec.  Following acceptance of ACK, keyboard is
+       reinitialized and performs a    Basic Assurance    Test (BAT).  The
+       keyboard defaults to    scan code 2.
+
+The PS/2 keyboard may send the following codes to the system:
+
+    00       Key detection error/overrun under scan code 2 or 3.
+
+   83AB       Keyboard ID bytes.
+
+    AA       Basic Assurance Test    completed.
+
+    FC       Basic Assurance Test    failed.
+
+    EE       Echo    of EE command.
+
+    FA       ACK code.
+
+    FE       Resend. Invalid input or parity error.
+
+    FF       Key detection error/overrun under scan code 1.
+
+____________________________________________________________________________
+----------------------------------------------------------------------------
+Port 61H: PS/2 System Control Port B
+----------------------------------------------------------------------------
+
+Write operations:
+
+   Bit     Function
+
+    7     Reset system timer 0 output latch (IRQ0)
+    6     Reserved
+    5     Reserved
+    4     Reserved
+    3     Enable    channel    check
+    2     Enable    parity check
+    1     Speaker data enable
+    0     System    timer 2    gate to    speaker
+
+Read operations:
+
+    7     1 = Parity check occurred
+    6     1 = Channel check occurred
+    5     System    timer 2    output
+    4     Toggles with each refresh request
+    3     Enable    channel    check result
+    2     Enable    parity check result
+    1     Speaker data enable result
+    0     System    timer 2    gate to    speaker    result
+// b800h7.C
+
+#include <stdio.h>
+#include <dos.h>
+#include <conio.h>
+
+
+// This program demonstrates the use of hardware scrolling.
+
+int count = 0;
+int base = 0;
+int direction = 0;
+
+  int  far *b800h;
+  int value, i, ax;
+
+
+int main()
+{
+  union REGS regs;
+  struct REGPACK regpack;
+
+  regs.h.ah = 0;
+  regs.h.al = 1;
+  int86(0x10, &regs, &regs);
+   
+
+   b800h = NULL;
+
+
+  ((unsigned long int)b800h) = 0xB800 * 65536; 
+
+   value = 'A' + 256*11; // Intense: Green + Blue = Light Blue
+
+
+for(i=0; i < 2000; i++)
+    b800h[i] = value;
+
+
+
+   value = 'B' + 256*13;  // Intense: Red + Blue = Purple 
+
+
+
+for(i=0; i < 2000; i++)
+    b800h[i+2000] = value;
+
+
+
+   value = 'C' + 256*14; // Intense:Red + Green  = Brown
+
+
+
+for(i=0; i < 2000; i++)
+    b800h[i+4000] = value;
+
+
+   value = 'D' + 256*143; // Blink, Red + Green + Blue = White
+
+
+
+for(i=0; i < 2000; i++)
+    b800h[i+6000] = value;
+
+
+//  ; 3D4H  Graphics adapter address register port
+//  ; 3D5H  Graphics adapter data register port
+
+//;
+//; Set the cursor address registers
+//;
+
+ax = 14 +  ((40*48+20) & (0xFF00));
+
+outport(0x3D4, ax);
+
+
+
+ax = 15 +  ((40*48+20) & (0xFF))*256  ;
+
+outport(0x3D4, ax);
+
+
+ax = 10;
+outport(0x3D4, ax);
+
+ax = 11 + 15*256;
+outport(0x3D4, ax);
+
+
+//;
+//;PART 2 : Scroll the display every second until a key is hit
+//;
+
+while(1)
+{
+
+delay(100);
+
+regpack.r_ax = 256;
+intr(0x16, &regpack);
+if ( (regpack.r_flags & 64) == 0)
+  {
+    // Read the key
+    regs.h.ah = 0;
+    int86(0x16, &regs, &regs);
+    if (regs.h.ah == 1)
+        break;
+ 
+ // Wait for another key
+    regs.h.ah = 0;
+    int86(0x16, &regs, &regs);
+    if (regs.h.ah == 1)
+        break;
+
+  } // if
+    
+if (direction == 0)
+  {
+    count++;
+    if (count >= 160)
+       direction = 1;
+    else 
+      base = base + 40;
+  } // if
+else
+//Backwards:
+  {
+    count--;
+    if (count <= 0)
+    {
+      direction = 0;
+    } // if
+    else
+      base = base - 40;
+
+   } // else
+
+
+//Update:
+
+ax = 12 +  (base & (0xFF00));
+
+outport(0x3D4, ax);
+
+ax = 13 +  (base & (0xFF))*256  ;
+
+outport(0x3D4, ax);
+
+}// while(1)
+
+  regs.x.ax = 3;
+  int86(0x10, &regs, &regs);
+
+  
+ return 0;
+
+} // main
+//;
+//; cursor8.c
+//;
+//;This program demonstrates cursor manipulation.
+//;
+//;
+
+#include <stdio.h>
+#include <dos.h>
+//#include <conio.h>
+
+
+
+
+
+int CursorPos;
+int Base;
+int Cursor_Sizes[]  = {0x0407,0x0205,0x0306,0x000F,0x010F,0x020F,0x030F,0x040F,
+                         0x050F,0x060F,0x070F,0x080F,0x090F,0x0A0F,0x0B0F,0x0C0F,
+                         0x0D0F,0x0E0F,0x000E,0x010E,0x020E,0x030E,0x040E,0x050E,
+                         0x060E,0x070E,0x080E,0x090E,0x0A0E,0x0B0E,0x0C0E,0x0D0E,
+                         0x0C0D,0x0B0D,0x0A0D,0x090D,0x080D,0x070D,0x060D,0x050D,
+                         0x040D,0x030D,0x020D,0x010D,0x010C,0x020C,0x030C,0x040C,
+                         0x050C,0x060C,0x070C,0x080C,0x090C,0x090C,0x0A0C,0x0B0C,
+                         0x0A0B,0x090B,0x080B,0x070B,0x060B,0x050B,0x040B,0x030B,
+                         0x020B,0x010B,0x010A,0x020A,0x030A,0x040A,0x050A,0x060A,
+                         0x070A,0x080A,0x090A,0x0809,0x0709,0x0609,0x0509,0x0409,
+                         0x0309,0x0209,0x0109,0x0108,0x0208,0x0308,0x0408,0x0508,
+                         0x0708,0x0607,0x0507,0x0407,0x0307,0x0207,0x0107,0x0106,
+                         0x0608,0x0206,0x0306,0x0406,0x0506,0x0405,0x0305,0x0205,
+                         0x0104,0x0204,0x0304,0x0203,0x0103,0x0203,0x0102,0x0002,
+                         0x0105,0x0001 };
+
+
+void SetCursorPos(int pos)
+{
+ int ax;
+
+ax = 14 +  ((pos) & (0xFF00));
+
+outport(0x3D4, ax);
+
+
+
+ax = 15 +  (pos & (0xFF))*256  ;
+
+outport(0x3D4, ax);
+
+
+} // SetCursorPos
+
+
+
+void SetCurSize(int currsize)
+{
+ int ax;
+
+
+ax = 10  + (currsize & 0xFF00);
+outport(0x3D4, ax);
+
+ax = 11  + (currsize & 0xFF)*256 ;
+outport(0x3D4, ax);
+
+
+} // SetCurSize
+
+int main()
+{
+
+  int  far *b800h;
+  int value, i, ax, flag, si, ch1;
+  union REGS regs;
+
+//;PART1 : INITIALIZE THE DISPLAY ADAPTER
+//;
+
+// Set window to 25x40 
+
+  regs.h.ah = 0;
+  regs.h.al = 1;
+  int86(0x10, &regs, &regs);
+ 
+
+
+
+//  0B800H     ; SEGMENT ADDRESS OF MEMORY ON COLOR ADAPTER
+//;
+//  SET UP EXTRA SEGMENT REGISTER
+//  ' ' CHARACTER SPACE TO FILL ADAPTER MEMORY
+//   ATTRIBUTE BYTE : INTENSE YELLOW
+//;
+//; WRITE 'A' IN MID SCREEN
+//;
+//  MOV              BYTE PTR ES:[2*(12*40+20)],'A'
+//;
+
+ ((unsigned long int)b800h) = 0xB800 * 65536; 
+
+   value = ' ' + 256*14;  // space + ATTRIBUTE BYTE : INTENSE YELLOW BLACK BACKGROUND
+
+
+for(i=0; i < 1000; i++)
+  {
+    b800h[i] = value;
+  } // for
+
+b800h[12*40+20] = b800h[12*40+20]  + 'A' - ' '; 
+
+//; SET THE CURSOR ADDRESS REGISTERS
+
+SetCursorPos(12*40+20);
+
+
+
+si = 0;
+
+while(1)
+{
+   ax = Cursor_Sizes[si];
+   SetCurSize(ax);
+   si++;
+   if (si >= 114)
+    si = 0;
+ 
+// Wait for key strike
+
+  regs.h.ah = 0;
+  int86(0x16, &regs, &regs);
+  if (regs.h.ah == 1)
+      break;
+
+} // while(1)
+
+// Return:
+
+// Reset window to 25x80 
+
+  regs.h.ah = 0;
+  regs.h.al = 2;
+  int86(0x10, &regs, &regs);
+ 
+
+} // main
