@@ -335,15 +335,11 @@ void update_ship_pos()
                        
                     
                         if (j >= 2 && j <= 77 &&terrain[i][ship_pos.x] == '_' && terrain[i][ship_pos.x-2] == '_' && terrain[i][ship_pos.x-1] == '_' && terrain[i][ship_pos.x+2] == '_' && terrain[i][ship_pos.x+1] == '_' && ship_vel.y <= 1) {// landed saftly also ship needs to land slowly
-                            //you landed saftly got 100 points and 10 fuel
-                            //if you get too 300 points you win message end game
+                            //you landed saftly got 100 points and 5 fuel
                             passes++;
                             score+=100;
                             fuel += 5;
-                            if (passes == 3) {
-                                diff++; // Increase game's difficulty
-                            }
-                            if (passes == 6) {
+                            if (passes == 3 || passes == 6) {
                                 diff++; // Increase game's difficulty
                             }
                             start_game();
