@@ -3,8 +3,8 @@
 #include <stdio.h>
 #include <dos.h>
 #include <time.h>
-#include "M_t.h"
 #include <string.h>
+#include <stdlib.h> 
 
 #define ARROW_NUMBER 80
 #define TARGET_NUMBER 4
@@ -54,6 +54,62 @@ const char ship[][6] = {
 /*CHANGE */
 int target_flags[TARGET_NUMBER];
 void interrupt (*old_int9)(void);
+
+void make_terrain(int terrain[25][80], int diff) {
+    int i;
+    int difficulty;
+    int ascending = 1, curr_y = 24;
+    int flat_1_index, flat_2_index;
+    int sizeof_;
+    
+    if (diff > 1) { difficulty = 2;}
+    else difficulty = 1;
+    sizeof_ = 10 / difficulty; 
+    // Generate two points to put flat surfaces. Could try generalizing it to put more than 2 flat surfaces
+    // We put them in two separate halves to separate them
+    srand(time(NULL));
+    flat_1_index = rand() % 30;
+    srand(time(NULL));
+    flat_2_index = rand() % 30 + 40;
+
+    curr_y = 24;
+    for (i = 0; i < 80; i++) {
+        if ((i >= flat_1_index && i <= flat_1_index+sizeof_) || (i >= flat_2_index && i <= flat_2_index+sizeof_)) {
+            terrain[ascending ? curr_y : curr_y-1][i] = '_'; // Align the underscore well with desecending mountains
+        } else {
+            int changed = 0, was_ascending;
+            
+            if (ascending) {
+                terrain[curr_y--][i] = '/';
+                if (curr_y <= 20) {
+                    changed = 1;
+                    ascending = 0;
+                }
+            } else {
+                terrain[curr_y++][i] = '\\';
+                if (curr_y >= 24) {
+                    ascending = 1;
+                    changed = 1;
+                }
+            }
+    
+            if (!changed) {
+                was_ascending = ascending;
+                ascending = rand() % 2;
+                changed = was_ascending != ascending;
+            }
+    
+            if (changed) {
+                if (ascending) {
+                    curr_y--;
+                } else {
+                    curr_y++;
+                }
+            }
+        }
+    }
+    
+}
 
 void quit_game()
 {
@@ -417,8 +473,6 @@ void updater()
         render_col(x+4, y+3, '/', 0x0c); 
     }
 } // updater 
-
-
 
 void main() {
     int uppid, dispid, recvpid, targid;
