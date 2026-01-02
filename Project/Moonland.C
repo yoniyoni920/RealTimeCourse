@@ -359,8 +359,8 @@ void update_ship_pos()
                                 game_over = 1; 
                             } else {
                                 passes = 0;
-                                if (diff > 1) {
-                                    diff = 1;
+                                if (diff > 1) { // Decrease difficulty in case of failure
+                                    diff--;
                                 }
                                 // Retry
                                 start_game();
