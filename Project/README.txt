@@ -1,0 +1,3 @@
+Compile moon.c with:
+tcc -ml -IC:\TC\INCLUDE;C:\TC\BIN\XINU4WIN\NEWSRC -LC:\TC\LIB;C:\TC\BIN\XINU4WIN\NEWSRC Moon.c C:\TC\BIN\XINU4WIN\NEWSRC\XINU.LIB
+for all LIB files
