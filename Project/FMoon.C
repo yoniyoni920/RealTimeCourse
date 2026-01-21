@@ -1,10 +1,9 @@
-/* game.c - xmain, prntr */
-
+//working code
 //#include <stdio.h>
 //#include <dos.h>
 #include <time.h>
 #include <string.h>
-#include <stdlib.h> 
+#include <stdlib.h>
 
 #include <conf.h>
 #include <kernel.h>
@@ -15,11 +14,6 @@
 #define TARGET_NUMBER 4
 #define ARRSIZE 1000
 
-struct intmap {
-	int ivec;              /* Interrupt vector number */
-	int (*newisr)(void);   /* Pointer to new interrupt service routine */
-	int (*oldisr)(void);   /* Pointer to old interrupt service routine */
-};
 typedef struct position
 {
     int x;
@@ -28,11 +22,12 @@ typedef struct position
 } POSITION;
 
 void interrupt (*old_int9)(void);
-int key_locked[128] = {0}; 
+void interrupt (*oldisr)(void);
+int key_locked[128] = {0};
 char entered_ascii_codes[ARRSIZE];
 int front = -1;
 int rear = -1;
-extern struct intmap sys_imp[];
+
 int game_over = 0;
 int tail = -1;
 char ch_arr[ARRSIZE];
@@ -53,7 +48,8 @@ int active_thrust;
 int flag = 0;
 int velocity_flag = 0;
 int receiver_pid;
-int semid;
+int sem_display;
+int sem_update;
 int gcycle_length;
 int point_in_cycle;
 int gno_of_pids;
@@ -69,7 +65,7 @@ const char ship[][6] = {
 
 
 char display[2001];
-/*CHANGE */
+
 int target_flags[TARGET_NUMBER];
 
 
@@ -81,10 +77,10 @@ void make_terrain(int terrain[25][80], int diff) {
     int ascending = 1, curr_y = 24;
     int flat_1_index, flat_2_index;
     int sizeof_;
-    
+
     if (diff > 1) { difficulty = 2;}
     else difficulty = 1;
-    sizeof_ = 10 / difficulty; 
+    sizeof_ = 10 / difficulty;
     // Generate two points to put flat surfaces. Could try generalizing it to put more than 2 flat surfaces
     // We put them in two separate halves to separate them
     srand(time(NULL));
@@ -98,7 +94,7 @@ void make_terrain(int terrain[25][80], int diff) {
             terrain[ascending ? curr_y : curr_y-1][i] = '_'; // Align the underscore well with desecending mountains
         } else {
             int changed = 0, was_ascending;
-            
+
             if (ascending) {
                 terrain[curr_y--][i] = '/';
                 if (curr_y <= 20) {
@@ -112,13 +108,13 @@ void make_terrain(int terrain[25][80], int diff) {
                     changed = 1;
                 }
             }
-    
+
             if (!changed) {
                 was_ascending = ascending;
                 ascending = rand() % 2;
                 changed = was_ascending != ascending;
             }
-    
+
             if (changed) {
                 if (ascending) {
                     curr_y--;
@@ -128,20 +124,10 @@ void make_terrain(int terrain[25][80], int diff) {
             }
         }
     }
-    
+
 }
 
-void quit_game()
-{
-    outport(0x20, 0x20);
-    setvect(9, old_int9);
-    asm {
-        CLI         // Clear Interrupt Flag, disabling maskable interrupts
-	
-   }
-   asm INT 27;
-    //exit(0);
-} // quit_game()
+
 
 void start_game() {
     memset(terrain, 0, sizeof(terrain));
@@ -164,72 +150,14 @@ void reset_game() {
 }
 
 
-// INTPROC new_int9(int mdevno)
-// //void interrupt new_int9(void)
-// {
-//
-//     /*
-//     when i key is pressed allow do its action on press but lock it until its unpressed to avoid duplication of orders
-//
-//     */
-//     unsigned char scan= 0;
-//     unsigned char key_index= 0;
-// 	char result = 0;
-//     //scan = inport(0x60);
-// 	int ascii = 0;
-// 	(*old_int9)();
-// 	asm {
-// 	  MOV AH,1
-// 	  INT 16h
-// 	  JZ Skip1
-// 	  MOV AH,0
-// 	  INT 16h
-// 	  MOV BYTE PTR scan,AH
-// 	  MOV BYTE PTR ascii,AL
-// 	 } //asm
-//     if (scan & 0x80) {
-//
-//         key_index = scan & 0x7F;
-//         key_locked[key_index] = 0;
-//     }
-//     else {
-//
-//         if (key_locked[scan] == 0) {
-//
-//
-//             if (scan == 75) { result = 'a'; entered_ascii_codes[++tail] = 'a'; }
-//             else if (scan == 72) {result = 'w'; entered_ascii_codes[++tail] = 'w'; }
-//             else if (scan == 77) {result = 'd'; entered_ascii_codes[++tail] = 'd'; }
-//             else if (scan == 0x1C && game_over) { reset_game(); }
-//             else if (scan == 1) quit_game();
-//
-//
-//             key_locked[scan] = 1;
-//         }
-//
-// 		if ((result != 0) && (tail < ARRSIZE))
-// 	   {
-// 		  entered_ascii_codes[++tail] = result;
-// 		  send(receiver_pid, result);
-// 	   } // if
-//
-// 		Skip1:
-//     }
-//
-//     //outport(0x20, 0x20);
-// 	return 0;
-// }
 INTPROC new_int9(int mdevno)
 {
 	int scan = 0;
 	int ascii = 0;
 	char result = 0;
 
-	// 1. CRITICAL FIX: Uncomment this!
-	// This lets the BIOS read the hardware and fill the buffer.
-	(*old_int9)();
 
-	// 2. The Professor's Code (Reads from the now-filled buffer)
+
 	asm {
 		MOV AH,1       // Check if key is available
 		INT 16h
@@ -240,9 +168,7 @@ INTPROC new_int9(int mdevno)
 		MOV BYTE PTR ascii,AL  // Save ASCII
 	  }
 
-	// 3. Process the key
-	// Note: Since INT 16h handles the "key hold" delay for us,
-	// we can remove the complex 'key_locked' logic.
+
 	if (scan == 75)      // Left
 		result = 'a';
 	else if (scan == 72) // Up
@@ -250,30 +176,22 @@ INTPROC new_int9(int mdevno)
 	else if (scan == 77) // Right
 		result = 'd';
 	else if (scan == 1)  // ESC
-		quit_game();
+		asm INT 27;
+	else if (scan == 28)  // ENTER
+		result = 'e';
 
-	// 4. Send to Receiver
+
 	if ((result != 0) && (tail < ARRSIZE))
 	{
 		entered_ascii_codes[++tail] = result;
 		send(receiver_pid, result);
 	}
-	outport(0x20, 0x20);
+
 	Skip1:
 		return 0;
 }
-void set_new_int9_newisr()
-{
-  int i;
-  for(i=0; i < 32; i++)
-    if (sys_imp[i].ivec == 9)
-    {
-    	old_int9 = (void interrupt (*)(void))sys_imp[i].oldisr;
-     sys_imp[i].newisr = new_int9;
-     return;
-    }
 
-} // set_new_int9_newisr
+
 void draw_background() {
     int i, j;
     for(i=0; i < 25; i++) {
@@ -295,26 +213,25 @@ void displayer(void)
     int i;
     int row, col;
     char c;
-    
+
     char hud_text[81];
     char *text_difficulty;
     int difficlty_shines;
     char msg_score[40];
     char msg_gameover[] = "GAME OVER";
     char press_enter[] = "PRESS ENTER TO CONTINUE";
-    // for(i=0; i < 2000; i++) {
-    //     b800h[2*i+1] = 0x08; // black over white
-    // }
+
    while (1){
-	   wait(semid);
+	   wait(sem_display);
+
 	   if(!game_over){
 			int x_pos = 2;
 			if(diff == 1) text_difficulty = "Easy";
 			else if(diff == 2) text_difficulty = "Medium";
 			else text_difficulty = "Hard";
 
-			
-			sprintf(hud_text, "Fuel:%4d Alt:%2d X.Velocity:%2d Y.Velocity:%2d Score:%4d Lives:%d Diff:%s", 
+
+			sprintf(hud_text, "Fuel:%4d Alt:%2d X.Velocity:%2d Y.Velocity:%2d Score:%4d Lives:%d Diff:%s",
 					fuel, (20 - ship_pos.y), ship_vel.x * diff, ship_vel.y * diff, score, lives, text_difficulty);
 			for(i = 0; i < strlen(hud_text); i++) {
 				if (x_pos+i < 80) {
@@ -381,9 +298,9 @@ void receiver()
 } // receiver
 void animate_explosion(int x, int y) {
     int frame, i;
-    
+
     char explosion_chars[] = {'*', '@', '#', '.', '+', 'x'};
-    
+
     for (frame = 0; frame < 4; frame++) {
         for (i = 0; i < 15; i++) {
             int dx = (rand() % (frame * 4 + 1)) - (frame * 2);
@@ -396,18 +313,19 @@ void animate_explosion(int x, int y) {
             }
         }
 
-        delay(100); 
+        delay(100);
     }
-    
+
 }
-// CHANGE
+
 void update_ship_pos()
 {
     int i,j;
-
+	if (game_over)
+		return;
     if (flag == 0) {
         ship_pos.x += ship_vel.x;
-        
+
         // Fix X position
         if (ship_pos.x < 0) {
             ship_pos.x += 80;
@@ -420,7 +338,7 @@ void update_ship_pos()
         } else if (ship_vel.y < 1) {
             ship_vel.y++;
         }
-        
+
         if ((ship_vel.y > 0 && ship_pos.y < 21) || (ship_vel.y < 0 && ship_pos.y > 2)) { // Prevent going above/below the screen
             ship_pos.y += ship_vel.y;
         }
@@ -429,14 +347,14 @@ void update_ship_pos()
             for(i=20; i < 25; i++) {
                 for(j=0; j < 80; j++) {
                     if (terrain[i][j] != 0 && j >= ship_pos.x-2 && j <= ship_pos.x+2 && i <= ship_pos.y+3 && i >= ship_pos.y) {
-                        //NULL is 0 which is nothing (air), so if we are not in air and - 
+                        //NULL is 0 which is nothing (air), so if we are not in air and -
                         //Is point j between the left and right walls of the ship?
                         //Is point i between the roof and the floor of the ship?
                         //Together we get answer to the question is there something inside the ship? - did we hit anything?
                         ship_vel.x = 0;// stop the ship
                         ship_vel.y = 0;
-                       
-                    
+
+
                         if (j >= 2 && j <= 77 &&terrain[i][ship_pos.x] == '_' && terrain[i][ship_pos.x-2] == '_' && terrain[i][ship_pos.x-1] == '_' && terrain[i][ship_pos.x+2] == '_' && terrain[i][ship_pos.x+1] == '_' && ship_vel.y <= 1) {// landed saftly also ship needs to land slowly
                             //you landed saftly got 100 points and 5 fuel
                             passes++;
@@ -455,7 +373,7 @@ void update_ship_pos()
                             draw_background();// makes the ship disapear during exploition
                             animate_explosion(ship_pos.x, ship_pos.y);
                             if (fuel <= 0 || lives <= 0) {
-                                game_over = 1; 
+                                game_over = 1;
                             } else {
                                 passes = 0;
                                 if (diff > 1) { // Decrease difficulty in case of failure
@@ -464,7 +382,7 @@ void update_ship_pos()
                                 // Retry
                                 start_game();
                             }
-                           
+
                         }
                         return;
                     }
@@ -487,7 +405,7 @@ void update_ship_pos()
 // Helper function to render something at some point in the screen with color
 void render_col(int col, int row, char c, int attr) {
     if (row >= 0 && row < 25 && col >= 0 && col < 80) {
-        display_draft[row][col] = c;  
+        display_draft[row][col] = c;
         color_draft[row][col] = attr;
     }
 }
@@ -499,21 +417,26 @@ void updater()
     int show_exhaust = 0;
     int x = ship_pos.x, y = ship_pos.y;
 
-    if (game_over) {
-        return;
-    }
 
-   
-    
 	while(1)
 	{
-		
-		wait(semid);
+
+		wait(sem_update);
+
+
+		x = ship_pos.x, y = ship_pos.y;
+		input_w = 0, input_d = 0, input_a = 0;
+		show_exhaust = 0;
 		update_ship_pos();
 		draw_background();
 	   while(front != -1)  {//Keep looping as long as the queue is not empty
 			char ch = ch_arr[front];//take the first char
 			//if(front != 0) {
+	   		if (game_over && ch == 'e') {
+	   		reset_game();
+	   		front = rear = -1;
+	   		break;
+	   	}
 			if(front != rear) {
 				front++;
 			} else {
@@ -524,7 +447,8 @@ void updater()
 			if (ch == 'd' || ch == 'D') input_d = 1;
 			if (ch == 'a' || ch == 'A') input_a = 1;
 		}// while(front != -1)
-
+		if (game_over)
+			continue;
 		if ((input_w) && fuel > 0) {
 			if (ship_vel.y > -3 ) {
 				active_thrust = 3;
@@ -535,13 +459,13 @@ void updater()
 			ship_vel.x++;
 			show_exhaust |= 1;
 			fuel--;
-			
+
 		}
 		if ((input_a) && fuel > 0 && ship_vel.x >=-2 ) {
 			ship_vel.x--;
 			show_exhaust |= 2;
 			fuel--;
-			
+
 		}
 		if (showship){
 			for (i = 0; i < 4; i++) {
@@ -563,21 +487,21 @@ void updater()
 		}
 		// 2. Left exhaust
 		else if (show_exhaust & 1) {
-			render_col(x-3, y+1, '/', 0x0c);  
-			render_col(x-3, y+2, '=', 0x0e);  
-			render_col(x-4, y+2, '<', 0x0c);  
-			render_col(x-3, y+3, '\\', 0x0c); 
+			render_col(x-3, y+1, '/', 0x0c);
+			render_col(x-3, y+2, '=', 0x0e);
+			render_col(x-4, y+2, '<', 0x0c);
+			render_col(x-3, y+3, '\\', 0x0c);
 		}
-		
+
 		// 3. Right  exhaust
 		else if (show_exhaust & 2) {
-			render_col(x+4, y+1, '\\', 0x0c); 
-			render_col(x+4, y+2, '=', 0x0e);  
-			render_col(x+5, y+2, '>', 0x0c);  
-			render_col(x+4, y+3, '/', 0x0c); 
+			render_col(x+4, y+1, '\\', 0x0c);
+			render_col(x+4, y+2, '=', 0x0e);
+			render_col(x+5, y+2, '>', 0x0c);
+			render_col(x+4, y+3, '/', 0x0c);
 		}
 	}
-} // updater 
+} // updater
 SYSCALL schedule(int no_of_pids, int cycle_length, int pid1, ...)
 {
   int i;
@@ -599,8 +523,8 @@ SYSCALL schedule(int no_of_pids, int cycle_length, int pid1, ...)
     iptr++;
   } // for
   restore(ps);
-	return OK;
-} // schedule 
+	//return OK;
+} // schedule
 
 void scheduler()
 {
@@ -610,16 +534,17 @@ void scheduler()
        if (point_in_cycle == gcycle_length)
          point_in_cycle = 0;
 
-   interval_ticks = gcycle_length / gno_of_pids; 
+   interval_ticks = gcycle_length / gno_of_pids;
    pid_index = 0;
 
   while(1)
-  {
-     sleept(interval_ticks);
+  {// if too fast change here.
+  	sleept(3);
 
-//     send(sched_arr_pid[pid_index], 11);
-     signal(semid);
 
+
+    signal(sem_update);
+  	signal(sem_display);
      pid_index++;
      if (pid_index == gno_of_pids)
        pid_index = 0;
@@ -627,10 +552,22 @@ void scheduler()
 
 } // scheduler
 
+void set_new_int9_newisr()
+{
+	int i;
+	for(i=0; i < 32; i++)
+		if (sys_imp[i].ivec == 9)
+		{
+			sys_imp[i].newisr = new_int9;
+			return;
+		}
+
+} // set_new_int9_newisr
+
 xmain() {
     int uppid, dispid, recvpid, targid;
     int i;
- 
+
     for(i=0; i< TARGET_NUMBER; i++) {
         target_flags[i] = 1;
     }
@@ -647,35 +584,24 @@ xmain() {
         INT 10h     // BIOS Video Interrupt
     }
 
-    //old_int9 = getvect(9);
-    //setvect(9, new_int9);
-	semid = screate(0);
+
+	sem_display = screate(0);
+	sem_update = screate(0);
+	set_new_int9_newisr();
 	recvpid = create(receiver, INITSTK, INITPRIO+3, "RECEIVER", 0);
 	receiver_pid = recvpid;
-    set_new_int9_newisr();
+
     make_terrain(terrain, diff);
-	
+
     reset_game();
 	resume( dispid = create(displayer, INITSTK, INITPRIO, "DISPLAYER", 0) );
     resume( recvpid  );
     resume( uppid = create(updater, INITSTK, INITPRIO, "UPDATER", 0) );
-    
+
 	schedule(2, 10, uppid, 0, dispid, 0);
 	resume( shdpid = create(scheduler, INITSTK, INITPRIO+1, "SCHEDULER", 0) );
-   // while(1) {
-   //     displayer();
-   //     receiver();
-   //     updater();
-   //
-    //    delay(150);
-        // sleep(1);
-  //  } // while
-  //  setvect(9, old_int9);
-    
- //   asm {
-  //      MOV AX, 3
-  //      INT 10h
-  //  }
-   // exit(0);
-	return 0;
+
+	while(1) {
+		receive();
+	}
 } // main
